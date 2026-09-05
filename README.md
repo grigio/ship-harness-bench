@@ -1,6 +1,6 @@
 <div align="center">
 
-![Ship Harness Bench](https://github.com/user-attachments/assets/placeholder)
+![Ship Harness Bench](./assets/krang.png)
 
 # Ship Harness Bench
 
