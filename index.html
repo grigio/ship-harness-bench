@@ -30,7 +30,13 @@
   /* Hero */
   .hero {
     text-align: center;
-    padding: 60px 24px 20px;
+    padding: 50px 24px 10px;
+  }
+  .hero-mascot {
+    width: 160px;
+    height: auto;
+    margin-bottom: 12px;
+    filter: drop-shadow(0 4px 20px rgba(0,0,0,0.4));
   }
   .hero h1 {
     font-size: clamp(28px, 5vw, 44px);
@@ -40,7 +46,7 @@
     margin-bottom: 8px;
   }
   .hero h1 span { color: var(--accent); }
-  .hero p {
+  .hero .subtitle {
     font-size: 15px;
     color: var(--ink-dim);
     letter-spacing: 0.04em;
@@ -60,13 +66,79 @@
     letter-spacing: 0.06em;
   }
 
+  /* Sections */
+  .section {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-align: center;
+    margin: 40px 0 16px;
+  }
+
+  /* Prompt card */
+  .prompt-card {
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px 24px;
+    text-align: center;
+  }
+  .prompt-card blockquote {
+    font-size: 14px;
+    font-style: italic;
+    color: var(--ink);
+    line-height: 1.7;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .prompt-card .model {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--ink-dim);
+    letter-spacing: 0.04em;
+  }
+  .prompt-card .model b { color: var(--accent); font-weight: 600; }
+
+  /* Takeaways */
+  .takeaways {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .takeaway {
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .takeaway h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+  .takeaway p {
+    font-size: 12px;
+    color: var(--ink-dim);
+    line-height: 1.55;
+  }
+
   /* Grid */
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 20px;
     max-width: 1100px;
-    margin: 40px auto 60px;
+    margin: 30px auto 50px;
     padding: 0 24px;
   }
 
@@ -164,16 +236,49 @@
 
   @media (max-width: 640px) {
     .grid { grid-template-columns: 1fr; }
-    .hero { padding: 40px 20px 10px; }
+    .hero { padding: 30px 20px 10px; }
+    .hero-mascot { width: 120px; }
+    .takeaways { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
 
 <div class="hero">
-  <h1>⚓ Ship <span>Harness</span> Bench</h1>
-  <p>A comparative benchmark of AI coding agents. Each agent received the same prompt and produced a browser-based 3D ship simulator.</p>
-  <div class="tag">9 agents · same prompt · different results</div>
+  <img class="hero-mascot" src="./assets/krang.png" alt="Krang mascot" />
+  <h1>Ship <span>Harness</span> Bench</h1>
+  <p class="subtitle">A benchmark to evaluate the quality of different LLM coding harnesses. Same model, same prompt, different tools.</p>
+  <div class="tag">9 agents &middot; same prompt &middot; different results</div>
+</div>
+
+<div class="section">
+  <div class="section-title">The Prompt</div>
+  <div class="prompt-card">
+    <blockquote>"Create a beautiful, relaxing, 3D ship simulator for the browser with the sun in the horizon alternating day and night and when you click on the sea the water makes a wave"</blockquote>
+    <div class="model">Model: <b>Deepseek V4 Flash 0731</b></div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Takeaways</div>
+  <div class="takeaways">
+    <div class="takeaway">
+      <h4>Harness matters</h4>
+      <p>The model is important, but the harness is a worthy optimization. Same model, vastly different results depending on the tooling.</p>
+    </div>
+    <div class="takeaway">
+      <h4>Browser-use is key</h4>
+      <p>A good browser-use tool is one of the most useful skills. Seeing, interacting with, and verifying output in a real browser is a game changer.</p>
+    </div>
+    <div class="takeaway">
+      <h4>Memory helps</h4>
+      <p>Memory and other tools could also be useful. Context retention and auxiliary capabilities shape output quality as much as the model itself.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">The Agents</div>
 </div>
 
 <div class="grid">
@@ -185,7 +290,7 @@
     </div>
     <div class="card-body">
       <h3>Ship Sim</h3>
-      <p>A quiet day on the water. Import maps, modular Three.js, day/night cycle with wave controls.</p>
+      <p>Import maps, modular Three.js, day/night cycle with wave controls.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -200,7 +305,7 @@
     </div>
     <div class="card-body">
       <h3>Open Sea</h3>
-      <p>Self-contained single HTML with inline Three.js bundle. Keyboard sailing controls and ambient ocean.</p>
+      <p>Self-contained single HTML with inline Three.js bundle. Keyboard sailing controls.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -215,7 +320,7 @@
     </div>
     <div class="card-body">
       <h3>Voyager</h3>
-      <p>Clean vanilla JS implementation with verification scripts. Minimal and focused approach.</p>
+      <p>Clean vanilla JS with verification scripts. Minimal and focused approach.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -230,7 +335,7 @@
     </div>
     <div class="card-body">
       <h3>Ship Simulator</h3>
-      <p>Enhanced variant with bun-built bundle. Polished visual effects and smooth animations.</p>
+      <p>Enhanced variant with bun-built bundle. Polished visual effects.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -245,7 +350,7 @@
     </div>
     <div class="card-body">
       <h3>Sunset Sails</h3>
-      <p>Second iteration with refined aesthetics. Static JS, no build step required.</p>
+      <p>Second iteration with refined aesthetics. Static JS, no build step.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -260,7 +365,7 @@
     </div>
     <div class="card-body">
       <h3>Adrift</h3>
-      <p>A quiet sea. Vendored Three.js, minimal vanilla implementation with orbit controls.</p>
+      <p>Vendored Three.js, minimal vanilla implementation with orbit controls.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -275,7 +380,7 @@
     </div>
     <div class="card-body">
       <h3>Drift</h3>
-      <p>A relaxing voyage. Vite-built with custom fonts, time-of-day slider, and ambient sound toggle.</p>
+      <p>Vite-built with custom fonts, time-of-day slider, and ambient sound.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -290,7 +395,7 @@
     </div>
     <div class="card-body">
       <h3>Sunset Sail</h3>
-      <p>3D ship simulator. Vendored Three.js with OrbitControls, straightforward implementation.</p>
+      <p>Vendored Three.js with OrbitControls, straightforward implementation.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -305,7 +410,7 @@
     </div>
     <div class="card-body">
       <h3>A Quiet Sea</h3>
-      <p>TypeScript + Vite. Features day cycle, seagulls, splashes, wave audio, and ambient soundscapes.</p>
+      <p>TypeScript + Vite. Seagulls, splashes, wave audio, ambient soundscapes.</p>
     </div>
     <div class="card-footer">
       <span>Launch simulator</span>
@@ -317,7 +422,7 @@
 
 <footer>
   Ship Harness Bench &middot; All simulators run client-side in your browser &middot;
-  <a href="https://github.com/1jehuang/jcode">Jcode</a>
+  <a href="https://github.com/grigio/ship-harness-bench">GitHub</a>
 </footer>
 
 </body>
