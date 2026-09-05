@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Ship Sim · a relaxing sea</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ccircle cx=%2750%27 cy=%2750%27 r=%2740%27 fill=%27%23ffd9a0%27/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --ink: rgba(240, 246, 255, 0.92);
+    --ink-dim: rgba(210, 224, 242, 0.62);
+    --glass: rgba(12, 24, 46, 0.42);
+    --glass-2: rgba(22, 40, 72, 0.5);
+    --line: rgba(255, 255, 255, 0.14);
+    --accent: #ffd9a0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #0a1428;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas { display: block; }
+
+  /* Title */
+  #brand {
+    position: fixed; top: 22px; left: 26px; z-index: 10;
+    pointer-events: none; user-select: none;
+  }
+  #brand h1 {
+    margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.42em;
+    text-shadow: 0 1px 12px rgba(0,0,0,0.55);
+  }
+  #brand p {
+    margin: 6px 0 0; font-size: 12px; letter-spacing: 0.18em;
+    color: var(--ink-dim); text-shadow: 0 1px 8px rgba(0,0,0,0.6);
+  }
+
+  /* Hint */
+  #hint {
+    position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+    z-index: 10; font-size: 13px; letter-spacing: 0.03em;
+    padding: 8px 16px; border-radius: 999px;
+    background: var(--glass); border: 1px solid var(--line);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    color: var(--ink-dim); transition: opacity 1.6s ease;
+  }
+  #hint b { color: var(--ink); font-weight: 600; }
+  #hint.fade { opacity: 0; }
+
+  /* Control panel */
+  #panelToggle {
+    position: fixed; top: 22px; right: 26px; z-index: 12;
+    width: 40px; height: 40px; border-radius: 12px; cursor: pointer;
+    background: var(--glass); border: 1px solid var(--line);
+    color: var(--ink); font-size: 15px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: grid; place-items: center;
+  }
+  #panelToggle:hover { background: var(--glass-2); }
+
+  #panel {
+    position: fixed; top: 74px; right: 26px; z-index: 12;
+    width: 268px; padding: 18px 18px 20px;
+    border-radius: 18px;
+    background: var(--glass); border: 1px solid var(--line);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  #panel.hidden { opacity: 0; transform: translateY(-8px); pointer-events: none; }
+
+  #panel h2 {
+    margin: 0 0 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.28em;
+    text-transform: uppercase; color: var(--ink-dim);
+  }
+  .row { margin-bottom: 14px; }
+  .row:last-child { margin-bottom: 0; }
+  .row > label {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12px; letter-spacing: 0.06em; color: var(--ink-dim);
+    margin-bottom: 8px;
+  }
+  .row > label span:last-child {
+    font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    border-radius: 4px; background: rgba(255,255,255,0.18); outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 15px; height: 15px;
+    border-radius: 50%; background: var(--accent); cursor: pointer;
+    box-shadow: 0 0 0 4px rgba(255, 200, 130, 0.18);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 15px; height: 15px; border: none; border-radius: 50%;
+    background: var(--accent); cursor: pointer;
+  }
+
+  .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  button {
+    font: inherit; font-size: 12px; letter-spacing: 0.04em;
+    color: var(--ink); cursor: pointer;
+    padding: 8px 10px; border-radius: 10px;
+    background: var(--glass-2); border: 1px solid var(--line);
+    transition: background 0.15s ease, transform 0.08s ease;
+  }
+  button:hover { background: rgba(40, 70, 120, 0.55); }
+  button:active { transform: scale(0.97); }
+  #play { font-size: 13px; }
+
+  @media (max-width: 640px) {
+    #brand h1 { font-size: 15px; }
+    #panel { width: calc(100vw - 52px); }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./lib/three.module.min.js",
+    "three/addons/": "./lib/addons/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="brand">
+    <h1>SHIP SIM</h1>
+    <p>a quiet day on the water</p>
+  </div>
+
+  <div id="hint"><b>Click the sea</b> to make a wave · drag to look · scroll to zoom</div>
+
+  <button id="panelToggle" title="Controls">☰</button>
+
+  <div id="panel">
+    <h2>Day &amp; Night</h2>
+    <div class="row">
+      <label>
+        <span>Time of day</span>
+        <span id="hourValue">08:30</span>
+      </label>
+      <input id="hour" type="range" min="0" max="24" step="0.01" value="8.5" />
+    </div>
+    <div class="row buttons" id="sat">
+      <button data-hour="6">Sunrise</button>
+      <button data-hour="12">Noon</button>
+      <button data-hour="18">Sunset</button>
+      <button id="play">❚❚</button>
+    </div>
+    <div class="row">
+      <label>
+        <span>Wave power</span>
+        <span id="waveValue">1.0×</span>
+      </label>
+      <input id="wave" type="range" min="0.2" max="2.4" step="0.05" value="1" />
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

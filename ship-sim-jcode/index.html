@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voyager · A relaxing sea simulator</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body class="intro">
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="clock">Day 1 · 08:00</div>
+  <div id="overlay-wrap">
+    <div id="overlay">
+      <h1>Voyager</h1>
+      <p id="overlay-msg">
+        A quiet sail across an endless sea.<br><br>
+        <b>Drag</b> to look around &nbsp;·&nbsp; <b>Scroll</b> to zoom<br>
+        <b>Click the water</b> to make a wave<br>
+        Left/right arrows or A/D to steer
+      </p>
+      <div class="hint" id="hint">Click anywhere to begin the voyage</div>
+      <button id="start">Set Sail</button>
+    </div>
+  </div>
+  <div id="status">Sunrise</div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

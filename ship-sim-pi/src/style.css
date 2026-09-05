@@ -1,0 +1,157 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a1a2e;
+  font-family: ui-serif, Georgia, 'Times New Roman', serif;
+}
+
+canvas {
+  display: block;
+}
+
+.title {
+  position: fixed;
+  top: 28px;
+  left: 32px;
+  color: #f4ead8;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.45);
+  user-select: none;
+  pointer-events: none;
+  animation: fade-in 2.4s ease both;
+}
+
+.title h1 {
+  font-size: clamp(26px, 3.4vw, 42px);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.title .sub {
+  margin-top: 6px;
+  font-size: clamp(12px, 1.2vw, 15px);
+  opacity: 0.75;
+  font-style: italic;
+  letter-spacing: 0.03em;
+}
+
+.phase {
+  position: fixed;
+  top: 32px;
+  right: 36px;
+  color: #f4ead8;
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  opacity: 0.85;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
+  user-select: none;
+  pointer-events: none;
+  animation: fade-in 2.4s ease both;
+  font-variant-numeric: tabular-nums;
+}
+
+.controls {
+  position: fixed;
+  bottom: 26px;
+  left: 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-radius: 14px;
+  background: rgba(10, 16, 26, 0.32);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f4ead8;
+  user-select: none;
+  animation: fade-in 2.4s ease both;
+}
+
+.speed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  opacity: 0.9;
+}
+
+.speed input[type='range'] {
+  width: 110px;
+  accent-color: #f4b35f;
+  cursor: pointer;
+}
+
+.btn {
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #f4ead8;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.25s ease, opacity 0.25s ease;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn.off {
+  opacity: 0.5;
+}
+
+.hint {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #f4ead8;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  opacity: 0.9;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 1.6s ease;
+  animation: fade-in 3s ease both;
+}
+
+.hint.fade {
+  opacity: 0;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .title {
+    top: 18px;
+    left: 20px;
+  }
+  .phase {
+    top: 22px;
+    right: 22px;
+  }
+  .hint {
+    display: none;
+  }
+}

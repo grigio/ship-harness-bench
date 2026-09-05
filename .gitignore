@@ -1,0 +1,5 @@
+node_modules/
+.bun-install/
+.bun-tmp/
+*.log
+.DS_Store

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Drift — a relaxing ship simulator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #04060c; }
+    #app { position: fixed; inset: 0; }
+    canvas { display: block; }
+
+    #hint {
+      position: fixed;
+      left: 50%;
+      bottom: 28px;
+      transform: translateX(-50%);
+      font-family: Georgia, "Times New Roman", serif;
+      font-style: italic;
+      font-size: 15px;
+      letter-spacing: 0.06em;
+      color: rgba(255, 255, 255, 0.85);
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+      pointer-events: none;
+      transition: opacity 2.5s ease;
+      white-space: nowrap;
+      z-index: 10;
+    }
+    #hint kbd {
+      font-family: inherit;
+      border: 1px solid rgba(255,255,255,0.45);
+      border-radius: 4px;
+      padding: 0 5px;
+      margin: 0 1px;
+      font-style: normal;
+      font-size: 13px;
+    }
+    #hint.hidden { opacity: 0; }
+
+    #loader {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 60%, #16324a 0%, #04060c 75%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 14px;
+      z-index: 20;
+      transition: opacity 1.4s ease;
+      color: rgba(255,255,255,0.8);
+      font-family: Georgia, serif;
+      font-style: italic;
+      letter-spacing: 0.25em;
+      font-size: 13px;
+    }
+    #loader.done { opacity: 0; pointer-events: none; }
+    #loader .wave {
+      width: 46px; height: 46px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: rgba(255,255,255,0.65);
+      animation: spin 1.1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="hint"><kbd>W</kbd><kbd>S</kbd> sail &nbsp;·&nbsp; <kbd>A</kbd><kbd>D</kbd> steer &nbsp;·&nbsp; drag to look · scroll to zoom · click the sea</div>
+  <div id="loader"><div class="wave"></div>setting sail…</div>
+  <script src="./dist/main.js"></script>
+</body>
+</html>

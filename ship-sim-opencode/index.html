@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunset Sail — 3D Ship Simulator</title>
+<style>
+  :root {
+    --panel: rgba(8, 14, 30, 0.42);
+    --stroke: rgba(255, 255, 255, 0.14);
+    --text: #eef4ff;
+    --muted: rgba(238, 244, 255, 0.62);
+    --gold: #ffc98a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #060a16; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: var(--text); }
+  canvas { display: block; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+
+  #title {
+    position: absolute; top: 26px; left: 30px;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+  }
+  #title h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400; font-size: 30px; letter-spacing: 0.06em;
+    color: #fff; line-height: 1.1;
+    background: linear-gradient(180deg, #ffffff, var(--gold));
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: var(--gold);
+  }
+  #title p { margin-top: 6px; font-size: 12.5px; color: var(--muted); letter-spacing: 0.03em; }
+
+  #hint {
+    position: absolute; bottom: 26px; left: 30px;
+    font-size: 13px; color: var(--muted); letter-spacing: 0.04em;
+    text-shadow: 0 1px 10px rgba(0, 0, 0, 0.5);
+    animation: fadein 2.2s ease 1.2s both;
+  }
+  #hint b { color: var(--gold); font-weight: 600; }
+
+  @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+  #panel {
+    position: absolute; right: 24px; bottom: 24px;
+    pointer-events: auto;
+    background: var(--panel);
+    border: 1px solid var(--stroke);
+    border-radius: 14px;
+    padding: 14px 16px;
+    width: 232px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+    user-select: none;
+  }
+  #phaseRow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  #phase { font-size: 13px; letter-spacing: 0.05em; color: var(--gold); font-weight: 600; }
+  #dayBar {
+    height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.14);
+    overflow: hidden; margin-bottom: 12px;
+  }
+  #dayFill {
+    height: 100%; width: 40%; border-radius: 2px;
+    background: linear-gradient(90deg, #ffb46b, #ffd9a0, #9fd4ff, #5c8dff, #0a1030);
+    transition: width 0.2s linear;
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .row + .row { margin-top: 10px; }
+  label { font-size: 11.5px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  input[type="range"] {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 4px; border-radius: 2px;
+    background: rgba(255, 255, 255, 0.16); outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--gold); border: 2px solid rgba(255, 255, 255, 0.85);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4); cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--gold); border: 2px solid rgba(255, 255, 255, 0.85); cursor: pointer;
+  }
+  #speedVal { font-size: 12px; color: var(--text); min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+  #pauseBtn {
+    pointer-events: auto;
+    background: rgba(255, 255, 255, 0.09);
+    border: 1px solid var(--stroke);
+    color: var(--text);
+    border-radius: 9px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #pauseBtn:hover { background: rgba(255, 255, 255, 0.18); }
+
+  #nogl {
+    display: none;
+    position: fixed; inset: 0; z-index: 50;
+    align-items: center; justify-content: center;
+    background: #060a16; color: #fff;
+    font-family: Georgia, serif; font-size: 18px; text-align: center; padding: 30px;
+  }
+  #nogl.show { display: flex; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="title">
+    <h1>Sunset Sail</h1>
+    <p>a slow 3D ship simulator · day &amp; night over the open sea</p>
+  </div>
+
+  <div id="hint"><b>Click the sea</b> to make a wave &nbsp;·&nbsp; drag to orbit &nbsp;·&nbsp; scroll to zoom</div>
+
+  <div id="panel">
+    <div id="phaseRow">
+      <span id="phase">Morning</span>
+    </div>
+    <div id="dayBar"><div id="dayFill"></div></div>
+    <div class="row">
+      <label for="speed">Day speed</label>
+      <input type="range" id="speed" min="0.25" max="6" step="0.25" value="1">
+      <span id="speedVal">1.0×</span>
+    </div>
+    <div class="row">
+      <label>Cycle</label>
+      <button id="pauseBtn" title="Pause the day / night cycle">⏸ Pause</button>
+    </div>
+  </div>
+</div>
+
+<div id="nogl">WebGL is not available in this browser.<br>This simulator needs WebGL to render 3D graphics.</div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/OrbitControls.js"></script>
+<script src="sim.js"></script>
+</body>
+</html>

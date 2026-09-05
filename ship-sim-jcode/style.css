@@ -1,0 +1,167 @@
+:root {
+  --ink: #eaf4ff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: "Segoe UI", "Helvetica Neue", system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: #04182b;
+}
+
+#c {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+#c:active { cursor: grabbing; }
+
+body.intro #c {
+  filter: brightness(0.55) saturate(1.05);
+  transition: filter 2.2s ease;
+}
+body.sailing #c {
+  filter: none;
+}
+
+/* ---------- HUD ---------- */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#clock {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 12px rgba(0,0,0,.55);
+  opacity: 0;
+  transition: opacity 1.5s ease;
+}
+body.sailing #clock { opacity: 1; }
+
+#status {
+  position: absolute;
+  left: 20px;
+  bottom: 18px;
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(234,244,255,.78);
+  text-shadow: 0 1px 8px rgba(0,0,0,.5);
+  opacity: 0;
+  transition: opacity 1.5s ease;
+}
+body.sailing #status { opacity: 1; }
+
+/* ---------- Intro overlay ---------- */
+#overlay-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;      /* "click anywhere to begin" during intro */
+  transition: opacity 2s ease, visibility 2s ease;
+}
+body.sailing #overlay-wrap {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#overlay {
+  text-align: center;
+  /* spans whole sky during intro so "click anywhere" works */
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+#overlay h1 {
+  font-size: clamp(44px, 8vw, 84px);
+  font-weight: 300;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
+  background: linear-gradient(180deg, #fff8e6 0%, #bfe0ff 60%, #64b5f6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 18px rgba(0,40,90,.6));
+  animation: floatIn 2.4s ease both;
+}
+
+#overlay-msg {
+  margin-top: 26px;
+  font-size: 15px;
+  line-height: 1.75;
+  letter-spacing: .04em;
+  color: rgba(234,244,255,.85);
+  text-shadow: 0 1px 10px rgba(0,20,50,.7);
+  opacity: 0;
+  animation: fadeUp 1.6s .5s ease both;
+}
+
+#overlay .hint {
+  margin-top: 30px;
+  font-size: 13px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #ffdda0;
+  text-shadow: 0 1px 8px rgba(0,0,0,.5);
+  animation: breathe 2.6s ease-in-out infinite;
+  opacity: 0;
+  animation: fadeUp 1.6s 1.5s ease both, breathe 2.6s 3.2s ease-in-out infinite;
+}
+
+#start {
+  margin-top: 26px;
+  pointer-events: auto;
+  font: inherit;
+  font-size: 15px;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: #04182b;
+  background: linear-gradient(180deg, #ffe9bd, #ffcf7e);
+  border: none;
+  border-radius: 999px;
+  padding: 14px 38px;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(255,180,80,.35);
+  opacity: 0;
+  animation: fadeUp 1.4s 2.1s ease both;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+#start:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(255,190,100,.5);
+}
+#start:active { transform: translateY(0); }
+
+/* ---------- Animations ---------- */
+@keyframes floatIn {
+  from { opacity: 0; transform: translateY(-18px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes breathe {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: 1; }
+}

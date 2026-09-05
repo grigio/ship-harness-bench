@@ -1,0 +1,13 @@
+{
+  "name": "ship-sim",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/app.mjs --outfile=dist/ship-sim.js --minify",
+    "build:dev": "bun build src/app.mjs --outfile=dist/ship-sim.js"
+  },
+  "dependencies": {
+    "three": "0.160.0"
+  }
+}

@@ -1,0 +1,6 @@
+# Editor / OS noise
+*.swp
+.DS_Store
+
+# Bun install metadata
+.bun/

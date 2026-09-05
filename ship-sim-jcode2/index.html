@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sunset Sails &middot; a relaxing 3D ship simulator</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+  .llm-joke {
+    position: absolute;
+    bottom: 12px;
+    right: 16px;
+    font-size: 11px;
+    opacity: 0.45;
+    color: #9fd8ff;
+    font-family: inherit;
+    pointer-events: none;
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+  <!-- 3D canvas is injected here by app.js -->
+  <div id="app"></div>
+
+  <div class="hud">
+    <div class="bar top-bar">
+      <div class="panel">
+        <h1>
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+              d="M2 20h20M4 20l2-6h12l2 6M5 14l-1-4a2 2 0 0 1 2-2h2l1 3M12 14l-2-9h2l3 9" />
+          </svg>
+          Sunset Sails
+        </h1>
+        <p class="subtitle">A tiny calm sea. Click the water to make gentle waves.</p>
+      </div>
+
+      <div class="panel time-panel">
+        <span class="label">Time of day</span>
+        <div class="clock">
+          <span id="clock">06:00</span>
+          <span id="phase">early morning</span>
+        </div>
+        <input id="day-slider" type="range" min="0" max="1" step="0.001" value="0.25" aria-label="Time of day" />
+      </div>
+    </div>
+
+    <div class="bar bottom-bar">
+      <div class="panel controls-panel">
+        <span class="label">Ambience</span>
+        <label class="toggle">
+          <input id="sound-toggle" type="checkbox" checked />
+          <span class="slider" aria-hidden="true"></span>
+          <span class="toggle-text">Waves &amp; wind</span>
+        </label>
+        <button id="drop-anchor" type="button">Drop anchor</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="llm-joke">&copy; 2026 Sunset Sails &mdash; no fish were harmed.</div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

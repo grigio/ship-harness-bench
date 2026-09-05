@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ship Simulator</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; }
+  canvas { display: block; }
+  #ui {
+    position: fixed; left: 22px; bottom: 18px; z-index: 5;
+    color: rgba(255,255,255,0.92); text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+    user-select: none; pointer-events: none;
+  }
+  #ui h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 2px; }
+  #ui p  { margin: 4px 0 0; font-size: 13px; opacity: 0.85; }
+  #clock {
+    position: fixed; right: 22px; top: 18px; z-index: 5;
+    color: rgba(255,255,255,0.9); text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+    font-size: 15px; letter-spacing: 1px; font-variant-numeric: tabular-nums;
+    user-select: none; pointer-events: none;
+  }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: baseline; margin-right: 7px; }
+  #warn[hidden] { display: none; }
+  #warn {
+    position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(120% 120% at 50% 30%, #0d1b33 0%, #05070f 100%);
+    color: #dbe6f5; text-align: center; padding: 24px;
+  }
+  #warn h2 { color: #9fc3ff; letter-spacing: 1px; margin: 0 0 10px; }
+  #warn p { max-width: 520px; line-height: 1.6; margin: 0 0 18px; opacity: 0.85; }
+  #warn code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <div id="ui">
+    <h1>SHIP SIMULATOR</h1>
+    <p>drag to look around &middot; scroll to zoom &middot; click the sea to make a wave</p>
+  </div>
+  <div id="clock"><span class="dot" id="phaseDot"></span><span id="phaseText"></span></div>
+  <div id="warn" hidden>
+    <div>
+      <h2>This browser cannot run the simulator</h2>
+      <p>It needs <b>WebGL</b>, which appears to be disabled or unsupported here.
+      Try enabling hardware acceleration, updating your browser, or opening the page in
+      Chrome, Edge, Firefox or Safari.</p>
+      <p style="opacity:0.6; font-size:13px">Ship Simulator &middot; single-file build, no network required</p>
+    </div>
+  </div>
+
+  <script src="dist/ship-sim.js"></script>
+</body>
+</html>

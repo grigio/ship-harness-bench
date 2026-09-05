@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ship Harness Bench — AI Agent Ship Simulators</title>
+<style>
+  :root {
+    --ink: rgba(240, 246, 255, 0.92);
+    --ink-dim: rgba(210, 224, 242, 0.55);
+    --glass: rgba(12, 24, 46, 0.55);
+    --glass-2: rgba(22, 40, 72, 0.65);
+    --line: rgba(255, 255, 255, 0.12);
+    --accent: #ffd9a0;
+    --card-bg: rgba(16, 32, 58, 0.7);
+    --card-hover: rgba(22, 44, 80, 0.85);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    min-height: 100vh;
+    background: #0a1428;
+    background-image:
+      radial-gradient(ellipse at 20% 80%, rgba(30, 80, 140, 0.15) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(60, 40, 120, 0.1) 0%, transparent 50%);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 60px 24px 20px;
+  }
+  .hero h1 {
+    font-size: clamp(28px, 5vw, 44px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-shadow: 0 2px 20px rgba(0,0,0,0.5);
+    margin-bottom: 8px;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero p {
+    font-size: 15px;
+    color: var(--ink-dim);
+    letter-spacing: 0.04em;
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+  .hero .tag {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--ink-dim);
+    letter-spacing: 0.06em;
+  }
+
+  /* Grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    max-width: 1100px;
+    margin: 40px auto 60px;
+    padding: 0 24px;
+  }
+
+  /* Card */
+  .card {
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    overflow: hidden;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    text-decoration: none;
+    color: inherit;
+  }
+  .card:hover {
+    background: var(--card-hover);
+    border-color: rgba(255, 217, 160, 0.25);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  }
+
+  .card-header {
+    padding: 20px 22px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(255, 217, 160, 0.15), rgba(100, 160, 255, 0.12));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: grid;
+    place-items: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .card-agent {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .card-body {
+    padding: 14px 22px 20px;
+    flex: 1;
+  }
+  .card-body h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    letter-spacing: 0.02em;
+  }
+  .card-body p {
+    font-size: 13px;
+    color: var(--ink-dim);
+    line-height: 1.55;
+  }
+
+  .card-footer {
+    padding: 0 22px 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-dim);
+  }
+  .card-footer .arrow {
+    transition: transform 0.2s;
+  }
+  .card:hover .card-footer .arrow {
+    transform: translateX(3px);
+    color: var(--accent);
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 20px 24px 40px;
+    font-size: 12px;
+    color: rgba(210, 224, 242, 0.3);
+    letter-spacing: 0.04em;
+  }
+  footer a {
+    color: rgba(210, 224, 242, 0.45);
+    text-decoration: none;
+  }
+  footer a:hover { color: var(--accent); }
+
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+    .hero { padding: 40px 20px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>⚓ Ship <span>Harness</span> Bench</h1>
+  <p>A comparative benchmark of AI coding agents. Each agent received the same prompt and produced a browser-based 3D ship simulator.</p>
+  <div class="tag">9 agents · same prompt · different results</div>
+</div>
+
+<div class="grid">
+
+  <a class="card" href="./ship-sim-codex/">
+    <div class="card-header">
+      <div class="card-icon">🌊</div>
+      <div class="card-agent">Codex</div>
+    </div>
+    <div class="card-body">
+      <h3>Ship Sim</h3>
+      <p>A quiet day on the water. Import maps, modular Three.js, day/night cycle with wave controls.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+  <a class="card" href="./ship-sim-dsh/">
+    <div class="card-header">
+      <div class="card-icon">🌅</div>
+      <div class="card-agent">DSH</div>
+    </div>
+    <div class="card-body">
+      <h3>Open Sea</h3>
+      <p>Self-contained single HTML with inline Three.js bundle. Keyboard sailing controls and ambient ocean.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+  <a class="card" href="./ship-sim-jcode/">
+    <div class="card-header">
+      <div class="card-icon">⛵</div>
+      <div class="card-agent">Jcode</div>
+    </div>
+    <div class="card-body">
+      <h3>Voyager</h3>
+      <p>Clean vanilla JS implementation with verification scripts. Minimal and focused approach.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+  <a class="card" href="./ship-sim-jcode-fx/">
+    <div class="card-header">
+      <div class="card-icon">✨</div>
+      <div class="card-agent">Jcode FX</div>
+    </div>
+    <div class="card-body">
+      <h3>Ship Simulator</h3>
+      <p>Enhanced variant with bun-built bundle. Polished visual effects and smooth animations.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+  <a class="card" href="./ship-sim-jcode2/">
+    <div class="card-header">
+      <div class="card-icon">🌇</div>
+      <div class="card-agent">Jcode 2</div>
+    </div>
+    <div class="card-body">
+      <h3>Sunset Sails</h3>
+      <p>Second iteration with refined aesthetics. Static JS, no build step required.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+  <a class="card" href="./ship-sim-o-0x/">
+    <div class="card-header">
+      <div class="card-icon">🌙</div>
+      <div class="card-agent">O-0x</div>
+    </div>
+    <div class="card-body">
+      <h3>Adrift</h3>
+      <p>A quiet sea. Vendored Three.js, minimal vanilla implementation with orbit controls.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+  <a class="card" href="./ship-sim-o-muse-1.2/">
+    <div class="card-header">
+      <div class="card-icon">🎨</div>
+      <div class="card-agent">Muse</div>
+    </div>
+    <div class="card-body">
+      <h3>Drift</h3>
+      <p>A relaxing voyage. Vite-built with custom fonts, time-of-day slider, and ambient sound toggle.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+  <a class="card" href="./ship-sim-opencode/">
+    <div class="card-header">
+      <div class="card-icon">🌅</div>
+      <div class="card-agent">OpenCode</div>
+    </div>
+    <div class="card-body">
+      <h3>Sunset Sail</h3>
+      <p>3D ship simulator. Vendored Three.js with OrbitControls, straightforward implementation.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+  <a class="card" href="./ship-sim-pi/">
+    <div class="card-header">
+      <div class="card-icon">🎵</div>
+      <div class="card-agent">Pi</div>
+    </div>
+    <div class="card-body">
+      <h3>A Quiet Sea</h3>
+      <p>TypeScript + Vite. Features day cycle, seagulls, splashes, wave audio, and ambient soundscapes.</p>
+    </div>
+    <div class="card-footer">
+      <span>Launch simulator</span>
+      <span class="arrow">→</span>
+    </div>
+  </a>
+
+</div>
+
+<footer>
+  Ship Harness Bench &middot; All simulators run client-side in your browser &middot;
+  <a href="https://github.com/1jehuang/jcode">Jcode</a>
+</footer>
+
+</body>
+</html>
