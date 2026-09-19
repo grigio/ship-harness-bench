@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ship — a quiet sea</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛵</text></svg>" />
+</head>
+<body>
+  <div id="ui">
+    <header class="title-block">
+      <h1>ship</h1>
+      <p>a quiet sea · day and night</p>
+    </header>
+    <div id="phase" class="phase">day</div>
+    <div id="hint" class="hint">click the sea to make a wave</div>
+  </div>
+  <div id="vignette"></div>
+  <canvas id="scene"></canvas>
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.js" } }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
