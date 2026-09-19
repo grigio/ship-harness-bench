@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Ship Simulator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, sans-serif; }
+  canvas { display: block; }
+  #info {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.6); color: #fff; padding: 10px 20px;
+    border-radius: 20px; font-size: 14px; pointer-events: none;
+    backdrop-filter: blur(10px); text-align: center; z-index: 10;
+  }
+  #time-display {
+    position: fixed; top: 20px; right: 20px;
+    background: rgba(0,0,0,0.5); color: #fff; padding: 10px 16px;
+    border-radius: 12px; font-size: 18px; z-index: 10;
+    backdrop-filter: blur(10px); font-variant-numeric: tabular-nums;
+  }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center;
+    justify-content: center; background: #0a0a2e; z-index: 100;
+    flex-direction: column; gap: 20px; transition: opacity 0.5s;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 50px; height: 50px; border: 4px solid rgba(255,255,255,0.2);
+    border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="loading"><div class="spinner"></div><span style="color:#fff">Sailing...</span></div>
+<div id="time-display">☀️ 12:00</div>
+<div id="info">Click on water to create waves · WASD to move · Mouse to look around · Scroll to zoom</div>
+
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────
+const CONFIG = {
+  waterSize: 500,
+  waterSegments: 200,
+  waveSpeed: 1.5,
+  waveAmplitude: 1.2,
+  waveCount: 3,
+  sunCycleDuration: 120, // seconds for full day-night cycle
+  shipSpeed: 0.3,
+  shipTurnSpeed: 2.0,
+};
+
+// ─── SCENE SETUP ─────────────────────────────────────────────────────
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 2000);
+camera.position.set(0, 15, 30);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 10;
+controls.maxDistance = 100;
+controls.maxPolarAngle = Math.PI * 0.85;
+controls.target.set(0, 0, 0);
+
+// ─── SKY & FOG ───────────────────────────────────────────────────────
+const skyGeo = new THREE.SphereGeometry(800, 32, 32);
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  uniforms: {
+    sunPosition: { value: new THREE.Vector3() },
+    dayColor: { value: new THREE.Color(0.3, 0.5, 0.9) },
+    sunsetColor: { value: new THREE.Color(0.9, 0.4, 0.1) },
+    nightColor: { value: new THREE.Color(0.02, 0.02, 0.08) },
+    topColor: { value: new THREE.Color(0.1, 0.3, 0.8) },
+    nightTopColor: { value: new THREE.Color(0.0, 0.0, 0.05) },
+    timeOfDay: { value: 0.5 },
+  },
+  vertexShader: `
+    varying vec3 vWorldPos;
+    void main() {
+      vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 sunPosition;
+    uniform vec3 dayColor, sunsetColor, nightColor, topColor, nightTopColor;
+    uniform float timeOfDay;
+    varying vec3 vWorldPos;
+    void main() {
+      vec3 dir = normalize(vWorldPos + vec3(0.001));
+      float h = dir.y;
+      float sunAngle = sunPosition.y;
+      float sunH = clamp(sunAngle * 1.5, 0.0, 1.0);
+      
+      vec3 day = mix(sunsetColor, topColor, h);
+      vec3 sunset = mix(nightColor, day, sunH * 0.5);
+      vec3 night = mix(nightColor, nightTopColor, h);
+      vec3 sky = mix(sunset, night, 1.0 - sunH * sunH);
+      
+      // Sun glow
+      vec3 sunDir = normalize(sunPosition);
+      float sunDot = max(dot(normalize(vWorldPos), sunDir), 0.0);
+      vec3 sunGlow = vec3(1.0, 0.8, 0.4) * pow(sunDot, 64.0) * sunH * 2.0;
+      sunGlow += vec3(1.0, 0.5, 0.2) * pow(sunDot, 8.0) * sunH * 0.5;
+      
+      // Moon glow
+      float moonDot = max(dot(normalize(vWorldPos), -sunDir), 0.0);
+      float moonGlow = pow(moonDot, 32.0) * (1.0 - sunH) * 0.8;
+      
+      gl_FragColor = vec4(sky + sunGlow + moonGlow, 1.0);
+    }
+  `,
+});
+const sky = new THREE.Mesh(skyGeo, skyMat);
+scene.add(sky);
+
+// Stars
+const starsGeo = new THREE.BufferGeometry();
+const starCount = 3000;
+const starPositions = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.random() * Math.PI * 0.5;
+  const r = 790;
+  starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+  starPositions[i * 3 + 1] = r * Math.cos(phi);
+  starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+}
+starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+const starsMat = new THREE.PointsMaterial({
+  size: 2, color: 0xffffff, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending,
+});
+const stars = new THREE.Points(starsGeo, starsMat);
+scene.add(stars);
+
+// ─── WATER ───────────────────────────────────────────────────────────
+const waterGeo = new THREE.PlaneGeometry(
+  CONFIG.waterSize, CONFIG.waterSize,
+  CONFIG.waterSegments, CONFIG.waterSegments
+);
+waterGeo.rotateX(-Math.PI / 2);
+
+const waterMat = new THREE.ShaderMaterial({
+  uniforms: {
+    time: { value: 0 },
+    waveSpeed: { value: CONFIG.waveSpeed },
+    waveAmplitude: { value: CONFIG.waveAmplitude },
+    sunPosition: { value: new THREE.Vector3() },
+    cameraPos: { value: new THREE.Vector3() },
+    ripples: { value: new Float32Array(60) }, // 20 ripples × 3 (x, y, time)
+    rippleCount: { value: 0 },
+    depthColor: { value: new THREE.Color(0.0, 0.15, 0.3) },
+    surfaceColor: { value: new THREE.Color(0.1, 0.3, 0.55) },
+    foamColor: { value: new THREE.Color(0.8, 0.85, 0.9) },
+    specularColor: { value: new THREE.Color(1.0, 0.9, 0.7) },
+  },
+  vertexShader: `
+    uniform float time, waveSpeed, waveAmplitude;
+    uniform float ripples[60];
+    uniform int rippleCount;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying vec2 vUv;
+    
+    // Simple hash for ripple positions
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    
+    void main() {
+      vUv = uv;
+      vec3 pos = position;
+      
+      // Multiple wave directions for realistic water
+      float wave1 = sin(pos.x * 0.08 + time * waveSpeed * 0.5) * cos(pos.z * 0.06 + time * waveSpeed * 0.3) * waveAmplitude;
+      float wave2 = sin(pos.x * 0.12 - time * waveSpeed * 0.4 + 1.5) * sin(pos.z * 0.09 + time * waveSpeed * 0.6 + 0.7) * waveAmplitude * 0.5;
+      float wave3 = sin(pos.x * 0.03 + pos.z * 0.03 + time * waveSpeed * 0.2) * waveAmplitude * 0.3;
+      
+      float rippleDisplacement = 0.0;
+      for (int i = 0; i < 20; i++) {
+        if (i >= rippleCount) break;
+        vec2 ripplePos = vec2(ripples[i * 3], ripples[i * 3 + 1]);
+        float rippleTime = ripples[i * 3 + 2];
+        float dist = distance(pos.xz, ripplePos);
+        float age = time - rippleTime;
+        float radius = age * 8.0;
+        float envelope = exp(-age * 0.5) * smoothstep(radius + 2.0, radius, dist) * smoothstep(radius - 2.0, radius, dist);
+        rippleDisplacement += sin(dist * 3.0 - age * 6.0) * envelope * 0.5;
+      }
+      
+      pos.y = wave1 + wave2 + wave3 + rippleDisplacement;
+      
+      // Compute normal via finite differences
+      float dx = cos(pos.x * 0.08 + time * waveSpeed * 0.5) * 0.08 * waveAmplitude
+               + sin(pos.x * 0.12 - time * waveSpeed * 0.4 + 1.5) * 0.12 * waveAmplitude * 0.5;
+      float dz = -sin(pos.z * 0.06 + time * waveSpeed * 0.3) * 0.06 * waveAmplitude
+                 + cos(pos.z * 0.09 + time * waveSpeed * 0.6 + 0.7) * 0.09 * waveAmplitude * 0.5;
+      vNormal = normalize(vec3(-dx, 1.0, -dz));
+      
+      vWorldPos = (modelMatrix * vec4(pos, 1.0)).xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 sunPosition, cameraPos, depthColor, surfaceColor, foamColor, specularColor;
+    uniform int rippleCount;
+    varying vec3 vWorldPos, vNormal;
+    varying vec2 vUv;
+    
+    void main() {
+      vec3 viewDir = normalize(cameraPos - vWorldPos);
+      vec3 N = normalize(vNormal);
+      vec3 L = normalize(sunPosition);
+      
+      // Fresnel effect
+      float fresnel = pow(1.0 - max(dot(viewDir, N), 0.0), 3.0);
+      
+      // Diffuse
+      float diff = max(dot(N, L), 0.0);
+      
+      // Specular (Blinn-Phong)
+      vec3 H = normalize(L + viewDir);
+      float spec = pow(max(dot(N, H), 0.0), 80.0);
+      
+      // Foam near peaks
+      float foam = smoothstep(0.8, 1.0, vWorldPos.y + 1.0);
+      
+      vec3 color = mix(depthColor, surfaceColor * (0.5 + diff * 0.5), 1.0 - fresnel);
+      color = mix(color, foamColor, foam * 0.3);
+      color += specularColor * spec * 0.8;
+      
+      // Sun reflection on water (glittering)
+      float glitter = pow(max(dot(N, H), 0.0), 128.0) * max(0.0, sin(vUv.x * 300.0 + vUv.y * 200.0)) * 0.3;
+      color += vec3(1.0, 0.9, 0.6) * glitter;
+      
+      // Depth tint
+      float depthFade = smoothstep(-1.0, 0.0, vWorldPos.y);
+      color = mix(color, color * 0.5, (1.0 - depthFade) * 0.5);
+      
+      gl_FragColor = vec4(color, 0.95);
+    }
+  `,
+  transparent: true,
+  side: THREE.DoubleSide,
+});
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.position.y = 0;
+scene.add(water);
+
+// ─── SHIP ────────────────────────────────────────────────────────────
+const shipGroup = new THREE.Group();
+
+// Hull
+const hullShape = new THREE.Shape();
+hullShape.moveTo(0, -1.5);
+hullShape.lineTo(6, -0.5);
+hullShape.quadraticCurveTo(7, 0, 6.5, 1);
+hullShape.lineTo(0, 2);
+hullShape.lineTo(-6.5, 1);
+hullShape.quadraticCurveTo(-7, 0, -6, -0.5);
+hullShape.lineTo(0, -1.5);
+hullShape.closePath();
+
+const hullGeo = new THREE.ExtrudeGeometry(hullShape, {
+  depth: 1.8, bevelEnabled: false
+});
+const hullMat = new THREE.MeshStandardMaterial({
+  color: 0x8B4513, roughness: 0.7, metalness: 0.1
+});
+const hull = new THREE.Mesh(hullGeo, hullMat);
+hull.rotation.x = Math.PI / 2;
+hull.position.set(0, 0, -0.9);
+shipGroup.add(hull);
+
+// Deck
+const deckGeo = new THREE.BoxGeometry(12, 0.3, 2);
+const deckMat = new THREE.MeshStandardMaterial({ color: 0xA0522D, roughness: 0.8 });
+const deck = new THREE.Mesh(deckGeo, deckMat);
+deck.position.y = 0.5;
+shipGroup.add(deck);
+
+// Mast
+const mastGeo = new THREE.CylinderGeometry(0.15, 0.2, 12, 8);
+const mastMat = new THREE.MeshStandardMaterial({ color: 0x654321, roughness: 0.6 });
+const mast = new THREE.Mesh(mastGeo, mastMat);
+mast.position.set(0, 6.5, 0);
+shipGroup.add(mast);
+
+// Main sail
+const sailShape = new THREE.Shape();
+sailShape.moveTo(0, 0);
+sailShape.lineTo(0, 9);
+sailShape.quadraticCurveTo(3, 4.5, 4, 0);
+sailShape.closePath();
+const sailGeo = new THREE.ShapeGeometry(sailShape);
+const sailMat = new THREE.MeshStandardMaterial({
+  color: 0xF5F5DC, side: THREE.DoubleSide, roughness: 0.9
+});
+const sail = new THREE.Mesh(sailGeo, sailMat);
+sail.position.set(0, 0.5, -0.1);
+shipGroup.add(sail);
+
+// Second sail
+const sail2Shape = new THREE.Shape();
+sail2Shape.moveTo(0, 0);
+sail2Shape.lineTo(0, 6);
+sail2Shape.quadraticCurveTo(2, 3, 3, 0);
+sail2Shape.closePath();
+const sail2Geo = new THREE.ShapeGeometry(sail2Shape);
+const sail2 = new THREE.Mesh(sail2Geo, sailMat.clone());
+sail2.position.set(0, 0.5, 0.3);
+sail2.scale.x = 0.8;
+shipGroup.add(sail2);
+
+// Bow sail
+const bowSailShape = new THREE.Shape();
+bowSailShape.moveTo(0, 0);
+bowSailShape.lineTo(0, 5);
+bowSailShape.quadraticCurveTo(2, 2.5, 2.5, 0);
+bowSailShape.closePath();
+const bowSailGeo = new THREE.ShapeGeometry(bowSailShape);
+const bowSail = new THREE.Mesh(bowSailGeo, sailMat.clone());
+bowSail.position.set(5, 1, 0);
+bowSail.rotation.y = Math.PI / 2;
+shipGroup.add(bowSail);
+
+// Figurehead
+const figureGeo = new THREE.SphereGeometry(0.3, 8, 8);
+const figureMat = new THREE.MeshStandardMaterial({ color: 0xDAA520, metalness: 0.8, roughness: 0.2 });
+const figure = new THREE.Mesh(figureGeo, figureMat);
+figure.position.set(7, 0.8, 0);
+shipGroup.add(figure);
+
+scene.add(shipGroup);
+
+// ─── LIGHTING ────────────────────────────────────────────────────────
+const ambientLight = new THREE.AmbientLight(0x404060, 0.3);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xffeedd, 1.5);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 200;
+sunLight.shadow.camera.left = -50;
+sunLight.shadow.camera.right = 50;
+sunLight.shadow.camera.top = 50;
+sunLight.shadow.camera.bottom = -50;
+sunLight.shadow.bias = -0.001;
+scene.add(sunLight);
+
+const moonLight = new THREE.DirectionalLight(0x6688cc, 0.0);
+scene.add(moonLight);
+
+// ─── RIPPLE SYSTEM ───────────────────────────────────────────────────
+const ripples = [];
+const RIPPLE_DECAY = 0.5;
+const RIPPLE_SPEED = 8.0;
+
+function addRipple(x, z) {
+  ripples.push({ x, z, time: waterMat.uniforms.time.value });
+  if (ripples.length > 20) ripples.shift();
+  updateRippleUniforms();
+}
+
+function updateRippleUniforms() {
+  const arr = new Float32Array(60);
+  for (let i = 0; i < 20; i++) {
+    if (i < ripples.length) {
+      arr[i * 3] = ripples[i].x;
+      arr[i * 3 + 1] = ripples[i].z;
+      arr[i * 3 + 2] = ripples[i].time;
+    }
+  }
+  waterMat.uniforms.ripples.value = arr;
+  waterMat.uniforms.rippleCount.value = ripples.length;
+}
+
+// ─── CLICK HANDLER ───────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+renderer.domElement.addEventListener('click', (e) => {
+  mouse.x = (e.clientX / innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(water);
+  if (intersects.length > 0) {
+    const pt = intersects[0].point;
+    addRipple(pt.x, pt.z);
+  }
+});
+
+// ─── INPUT ───────────────────────────────────────────────────────────
+const keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+let mouseX = 0, mouseY = 0;
+window.addEventListener('mousemove', e => {
+  mouseX = e.clientX / innerWidth - 0.5;
+  mouseY = e.clientY / innerHeight - 0.5;
+});
+
+// ─── TIME & UI ───────────────────────────────────────────────────────
+const timeDisplay = document.getElementById('time-display');
+let timeOfDay = 0.45; // Start near dawn
+
+function updateSunPosition() {
+  const angle = (timeOfDay - 0.25) * Math.PI * 2;
+  const x = Math.cos(angle) * 100;
+  const y = Math.sin(angle) * 100;
+  const z = 50;
+  const sunPos = new THREE.Vector3(x, y, z);
+  
+  skyMat.uniforms.sunPosition.value.copy(sunPos);
+  waterMat.uniforms.sunPosition.value.copy(sunPos);
+  
+  sunLight.position.copy(sunPos).multiplyScalar(0.5);
+  
+  const sunH = Math.max(0, sin(angle));
+  const intensity = Math.max(0.0, sunH * 1.5);
+  sunLight.intensity = intensity;
+  sunLight.color.setHSL(0.1, 0.3, 0.5 + sunH * 0.5);
+  
+  const moonIntensity = Math.max(0, -sin(angle)) * 0.3;
+  moonLight.intensity = moonIntensity;
+  moonLight.position.set(-x * 0.5, -y * 0.5, 30);
+  
+  // Stars
+  starsMat.opacity = Math.max(0, (1.0 - sunH) * 2.0);
+  
+  // Tone mapping exposure
+  renderer.toneMappingExposure = 0.3 + sunH * 0.9;
+  
+  // Time display
+  const hours = Math.floor(timeOfDay * 24) % 24;
+  const mins = Math.floor((timeOfDay * 24 - hours) * 60);
+  const icon = sunH > 0.1 ? '☀️' : '🌙';
+  timeDisplay.textContent = `${icon} ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+  
+  return sunPos;
+}
+
+function sin(x) { return Math.sin(x); }
+
+// ─── SHIP CONTROLS ───────────────────────────────────────────────────
+let shipAngle = 0;
+let shipBob = 0;
+let shipPitch = 0;
+let shipRoll = 0;
+
+function updateShip(dt) {
+  const turning = keys['ArrowLeft'] || keys['KeyA'];
+  const strafe = keys['ArrowRight'] || keys['KeyD'];
+  const fwd = keys['ArrowUp'] || keys['KeyW'];
+  const rev = keys['ArrowDown'] || keys['KeyS'];
+  
+  if (turning) shipAngle -= CONFIG.shipTurnSpeed * dt;
+  if (strafe) shipAngle += CONFIG.shipTurnSpeed * dt * 0.3;
+  
+  const speed = fwd ? CONFIG.shipSpeed : rev ? -CONFIG.shipSpeed * 0.5 : 0;
+  
+  shipGroup.position.x += Math.cos(shipAngle) * speed * dt;
+  shipGroup.position.z += Math.sin(shipAngle) * speed * dt;
+  
+  // Bob and rock
+  const t = waterMat.uniforms.time.value;
+  const waveHeight = Math.sin(shipGroup.position.x * 0.08 + t * CONFIG.waveSpeed * 0.5)
+                   + Math.sin(shipGroup.position.z * 0.09 + t * CONFIG.waveSpeed * 0.6) * 0.5;
+  shipGroup.position.y = waveHeight * 0.3;
+  shipPitch = waveHeight * 0.15;
+  shipRoll = Math.cos(t * 0.7) * 0.05;
+  
+  shipGroup.rotation.x = shipPitch;
+  shipGroup.rotation.z = shipRoll;
+  shipGroup.rotation.y = shipAngle + Math.PI / 2;
+  
+  // Sail billow
+  const windAngle = shipAngle + Math.PI;
+  const sailAngle = windAngle * 0.3;
+  sail.rotation.y = sailAngle * 0.3;
+  sail2.rotation.y = sailAngle * 0.2;
+  bowSail.rotation.y = Math.PI / 2 + sailAngle * 0.25;
+}
+
+// ─── ANIMATION LOOP ──────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const dt = Math.min(clock.getDelta(), 0.05);
+  timeOfDay = (timeOfDay + dt / CONFIG.sunCycleDuration) % 1.0;
+  
+  updateSunPosition();
+  updateShip(dt);
+  waterMat.uniforms.time.value += dt;
+  
+  controls.update();
+  
+  // Camera follows ship loosely
+  const shipPos = shipGroup.position;
+  const camTarget = new THREE.Vector3(
+    shipPos.x + Math.cos(shipAngle) * -15,
+    shipPos.y + 8,
+    shipPos.z + Math.sin(shipAngle) * -15
+  );
+  controls.target.lerp(shipPos, 0.02);
+  
+  renderer.render(scene, camera);
+}
+
+// ─── RESIZE ──────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ─── INIT ────────────────────────────────────────────────────────────
+setTimeout(() => {
+  document.getElementById('loading').classList.add('hidden');
+  animate();
+}, 500);
+</script>
+</body>
+</html>

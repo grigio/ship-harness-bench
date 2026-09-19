@@ -3,3 +3,4 @@ node_modules/
 .bun-tmp/
 *.log
 .DS_Store
+.agents/

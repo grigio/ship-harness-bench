@@ -47,7 +47,7 @@
       flex-direction: column;
       gap: 14px;
       z-index: 20;
-      transition: opacity 1.4s ease;
+      transition: opacity 0.6s ease;
       color: rgba(255,255,255,0.8);
       font-family: Georgia, serif;
       font-style: italic;
@@ -64,11 +64,300 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
   <div id="app"></div>
   <div id="hint"><kbd>W</kbd><kbd>S</kbd> sail &nbsp;·&nbsp; <kbd>A</kbd><kbd>D</kbd> steer &nbsp;·&nbsp; drag to look · scroll to zoom · click the sea</div>
   <div id="loader"><div class="wave"></div>setting sail…</div>
-  <script src="./dist/main.js"></script>
+  <script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+  const app = document.getElementById('app');
+  const loader = document.getElementById('loader');
+  const hint = document.getElementById('hint');
+
+  window.__errors = [];
+  addEventListener('error', e => window.__errors.push(String(e.message)));
+  addEventListener('unhandledrejection', e => window.__errors.push('promise: ' + e.reason));
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  app.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87c5e8);
+  scene.fog = new THREE.Fog(0x87c5e8, 60, 420);
+
+  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 3000);
+  camera.position.set(0, 6, 20);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 1.5, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.25;
+  controls.minDistance = 6;
+  controls.maxDistance = 120;
+  controls.maxPolarAngle = Math.PI * 0.495;
+
+  // lights
+  const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  scene.add(sunLight, sunLight.target);
+  const hemi = new THREE.HemisphereLight(0xbfd9e8, 0x1c3a4a, 0.6);
+  scene.add(hemi);
+
+  // sky
+  const SUN_R = 260;
+  const sun = new THREE.Mesh(
+    new THREE.SphereGeometry(14, 32, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffdf8a, fog: false })
+  );
+  const moon = new THREE.Mesh(
+    new THREE.SphereGeometry(9, 32, 32),
+    new THREE.MeshBasicMaterial({ color: 0xdfe8ff, fog: false })
+  );
+  scene.add(sun, moon);
+
+  let stars;
+  {
+    const N = 1600;
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const u = Math.random() * 0.95 + 0.02;
+      const r = 880;
+      pos[i * 3]     = Math.cos(a) * Math.sqrt(1 - u * u) * r;
+      pos[i * 3 + 1] = u * r;
+      pos[i * 3 + 2] = Math.sin(a) * Math.sqrt(1 - u * u) * r;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    stars = new THREE.Points(g, new THREE.PointsMaterial({
+      color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, fog: false
+    }));
+    scene.add(stars);
+  }
+
+  // sea
+  const SEA_SIZE = 400, SEA_SEG = 160;
+  const seaGeo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, SEA_SEG, SEA_SEG);
+  seaGeo.rotateX(-Math.PI / 2);
+  const seaMat = new THREE.MeshStandardMaterial({ color: 0x1f7a99, roughness: 0.38, metalness: 0.25 });
+  const sea = new THREE.Mesh(seaGeo, seaMat);
+  scene.add(sea);
+  const seaPos = seaGeo.attributes.position;
+
+  const ripples = [];
+  function baseHeight(x, z, t) {
+    return 0.40 * Math.sin(x * 0.16 + t * 0.8) * Math.cos(z * 0.13 + t * 0.6)
+         + 0.25 * Math.sin((x + z) * 0.10 + t * 0.45)
+         + 0.12 * Math.sin(x * 0.33 - t * 1.2) * Math.sin(z * 0.27 + t * 1.0);
+  }
+  function rippleHeight(x, z, t) {
+    let h = 0;
+    for (let i = 0; i < ripples.length; i++) {
+      const r = ripples[i];
+      const age = t - r.t;
+      if (age < 0 || age > 12) continue;
+      const R = age * 9;
+      const dx = x - r.x, dz = z - r.z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      const band = Math.exp(-((d - R) * (d - R)) / 45);
+      const decay = Math.exp(-age * 0.6);
+      if (decay > 0.02) h += Math.sin(d * 0.8 - age * 6) * 1.5 * band * decay;
+    }
+    return h;
+  }
+  const waterH = (x, z, t) => baseHeight(x, z, t) + rippleHeight(x, z, t);
+
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  let downPos = null;
+  renderer.domElement.addEventListener('pointerdown', e => { downPos = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!downPos) return;
+    const dx = e.clientX - downPos[0], dy = e.clientY - downPos[1];
+    downPos = null;
+    if (dx * dx + dy * dy > 36) return;
+    mouse.x = (e.clientX / innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hit = raycaster.intersectObject(sea)[0];
+    if (hit) {
+      ripples.push({ x: hit.point.x, z: hit.point.z, t: simTime });
+      if (ripples.length > 10) ripples.shift();
+      hint.classList.add('hidden');
+    }
+  });
+
+  // ship
+  const ship = new THREE.Group();
+  let portholeMat;
+  {
+    const wood  = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.7, metalness: 0.05 });
+    const dark  = new THREE.MeshStandardMaterial({ color: 0x5f3d22, roughness: 0.8 });
+    const white = new THREE.MeshStandardMaterial({ color: 0xf2ede4, roughness: 0.6 });
+
+    const s = new THREE.Shape();
+    s.moveTo(-6.2, 0.4);
+    s.lineTo(-5.6, -1.1);
+    s.lineTo(4.6, -1.0);
+    s.lineTo(7.0, 0.9);
+    s.lineTo(5.2, 2.3);
+    s.lineTo(-5.8, 2.3);
+    s.closePath();
+    const hull = new THREE.Mesh(new THREE.ExtrudeGeometry(s, {
+      depth: 2.6, bevelEnabled: true, bevelSize: 0.15, bevelThickness: 0.15, bevelSegments: 2
+    }), wood);
+    hull.position.z = -1.3;
+    ship.add(hull);
+
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.35, 2.9), dark);
+    deck.position.set(-0.3, 2.35, 0);
+    ship.add(deck);
+
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.7, 2.2), white);
+    cabin.position.set(-3.2, 3.4, 0);
+    ship.add(cabin);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.3, 2.6), dark);
+    roof.position.set(-3.2, 4.4, 0);
+    ship.add(roof);
+
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 5.4, 10), dark);
+    mast.position.set(0.8, 5.4, 0);
+    ship.add(mast);
+
+    const sailShape = new THREE.Shape();
+    sailShape.moveTo(0, 0);
+    sailShape.lineTo(0, 4.6);
+    sailShape.lineTo(2.6, 0.6);
+    sailShape.closePath();
+    const sail = new THREE.Mesh(new THREE.ShapeGeometry(sailShape),
+      new THREE.MeshStandardMaterial({ color: 0xf7f3e9, roughness: 0.8, side: THREE.DoubleSide }));
+    sail.position.set(0.95, 3.4, 0.05);
+    ship.add(sail);
+
+    portholeMat = new THREE.MeshStandardMaterial({ color: 0x332211, emissive: 0xffc966, emissiveIntensity: 0.2 });
+    for (let i = 0; i < 5; i++) {
+      const x = -4.6 + i * 1.7;
+      const p = new THREE.Mesh(new THREE.CircleGeometry(0.22, 16), portholeMat);
+      p.position.set(x, 1.4, 1.42);
+      const p2 = p.clone();
+      p2.position.z = -1.42;
+      p2.rotation.y = Math.PI;
+      ship.add(p, p2);
+    }
+  }
+  scene.add(ship);
+
+  function updateShip(t) {
+    const e = 2.2;
+    ship.position.set(0, waterH(0, 0, t) + 0.55, 0);
+    ship.rotation.z = Math.atan2(waterH(e, 0, t) - waterH(-e, 0, t), 2 * e) * 1.2;
+    ship.rotation.x = Math.atan2(waterH(0, e, t) - waterH(0, -e, t), 2 * e) * 1.2;
+    ship.rotation.y = Math.sin(t * 0.15) * 0.04;
+  }
+
+  // day/night
+  const DAY = 90;
+  const THETA0 = Math.PI * 0.35;
+  let simTime = 0;
+
+  const cDay     = new THREE.Color(0x87c5e8);
+  const cNight   = new THREE.Color(0x0a1026);
+  const cSunset  = new THREE.Color(0xff8a4a);
+  const cSunHigh = new THREE.Color(0xfff3cf);
+  const cSunLow  = new THREE.Color(0xff9a45);
+  const cWDay    = new THREE.Color(0x1f7a99);
+  const cWNight  = new THREE.Color(0x0c2f44);
+  const tmpC = new THREE.Color();
+
+  function updateSky(s) {
+    const dayF = THREE.MathUtils.smoothstep(s, -0.08, 0.45);
+    tmpC.copy(cNight).lerp(cDay, dayF);
+    const horizon = Math.exp(-(s * s) / (2 * 0.14 * 0.14));
+    tmpC.lerp(cSunset, horizon * 0.55 * (s > -0.3 ? 1 : 0.4));
+    scene.background.copy(tmpC);
+    scene.fog.color.copy(tmpC);
+    sunLight.intensity = 0.15 + dayF * 1.6;
+    sunLight.color.copy(cSunLow).lerp(cSunHigh, dayF);
+    hemi.intensity = 0.25 + dayF * 0.5;
+    stars.material.opacity = (1 - dayF) * 0.9;
+    seaMat.color.copy(cWNight).lerp(cWDay, dayF);
+    portholeMat.emissiveIntensity = 0.15 + (1 - dayF) * 1.6;
+  }
+
+  const clock = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    simTime += dt;
+    const t = simTime;
+
+    const theta = t * (Math.PI * 2 / DAY) + THETA0;
+    const s = Math.sin(theta);
+    const c = Math.cos(theta);
+    sun.position.set(c * SUN_R, s * SUN_R, -120);
+    moon.position.set(-c * SUN_R, -s * SUN_R, 120);
+    sunLight.position.copy(sun.position).normalize().multiplyScalar(150);
+
+    updateSky(s);
+
+    for (let i = 0; i < seaPos.count; i++) {
+      const x = seaPos.getX(i), z = seaPos.getZ(i);
+      seaPos.setY(i, waterH(x, z, t));
+    }
+    seaPos.needsUpdate = true;
+    seaGeo.computeVertexNormals();
+
+    while (ripples.length && t - ripples[0].t > 12) ripples.shift();
+
+    updateShip(t);
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // hide loader
+  setTimeout(() => loader.classList.add('done'), 300);
+  setTimeout(() => { loader.style.display = 'none'; }, 1000);
+  setTimeout(() => hint.classList.add('hidden'), 7000);
+
+  // WASD sailing (simple)
+  const keys = {};
+  addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+  addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+  // expose for testing
+  window.ship = {
+    phase: () => {
+      const th = (simTime * (Math.PI * 2 / DAY) + THETA0) % (Math.PI * 2);
+      return th / (Math.PI * 2);
+    },
+    setPhase: (p) => { simTime = ((p * Math.PI * 2 - THETA0) / (Math.PI * 2)) * DAY; },
+    ripple: (x = 0, z = 10) => ripples.push({ x, z, t: simTime }),
+    errors: () => window.__errors
+  };
+  </script>
 </body>
 </html>
