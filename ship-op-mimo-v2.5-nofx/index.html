@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ship Simulator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #000; font-family: 'Georgia', serif; }
+  canvas { display: block; }
+  #info {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    color: #fff; font-size: 14px; text-align: center; pointer-events: none;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.6); opacity: 0.8;
+  }
+  #clock {
+    position: absolute; top: 20px; right: 30px;
+    color: #fff; font-size: 22px; font-weight: bold; pointer-events: none;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.7); opacity: 0.9;
+    background: rgba(0,0,0,0.25); padding: 8px 16px; border-radius: 8px;
+  }
+  #compass {
+    position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+    width: 80px; height: 80px; border: 2px solid rgba(255,255,255,0.5);
+    border-radius: 50%; pointer-events: none;
+  }
+  #compass::after {
+    content: 'N'; position: absolute; top: 4px; left: 50%;
+    transform: translateX(-50%); color: #f55; font-size: 14px; font-weight: bold;
+  }
+</style>
+</head>
+<body>
+<div id="info">Click the water to create waves · Drag to look around · Scroll to zoom</div>
+<div id="clock"></div>
+<div id="compass"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ─── SCENE SETUP ───
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.set(0, 12, 30);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+
+// ─── FOG ───
+scene.fog = new THREE.FogExp2(0x87CEEB, 0.0015);
+
+// ─── LIGHTING ───
+const ambientLight = new THREE.AmbientLight(0x4466aa, 0.4);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xffeedd, 1.5);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.left = -50;
+sunLight.shadow.camera.right = 50;
+sunLight.shadow.camera.top = 50;
+sunLight.shadow.camera.bottom = -50;
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 200;
+scene.add(sunLight);
+
+const hemisphereLight = new THREE.HemisphereLight(0x88bbff, 0x445566, 0.3);
+scene.add(hemisphereLight);
+
+// ─── SKY DOME ───
+const skyGeo = new THREE.SphereGeometry(800, 32, 32);
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: {
+    topColor:    { value: new THREE.Color(0x0077ff) },
+    bottomColor: { value: new THREE.Color(0xffffff) },
+    offset:      { value: 20 },
+    exponent:    { value: 0.4 },
+  },
+  vertexShader: `
+    varying vec3 vWorldPosition;
+    void main() {
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPos.xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 topColor;
+    uniform vec3 bottomColor;
+    uniform float offset;
+    uniform float exponent;
+    varying vec3 vWorldPosition;
+    void main() {
+      float h = normalize(vWorldPosition + offset).y;
+      gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+    }
+  `,
+  side: THREE.BackSide,
+});
+const sky = new THREE.Mesh(skyGeo, skyMat);
+scene.add(sky);
+
+// ─── SUN SPHERE ───
+const sunSphere = new THREE.Mesh(
+  new THREE.SphereGeometry(8, 32, 32),
+  new THREE.MeshBasicMaterial({ color: 0xffdd44 })
+);
+scene.add(sunSphere);
+
+// Moon
+const moonSphere = new THREE.Mesh(
+  new THREE.SphereGeometry(5, 32, 32),
+  new THREE.MeshBasicMaterial({ color: 0xddddff })
+);
+scene.add(moonSphere);
+
+// ─── STARS ───
+const starsGeo = new THREE.BufferGeometry();
+const starPositions = [];
+for (let i = 0; i < 2000; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  const r = 700 + Math.random() * 80;
+  starPositions.push(
+    r * Math.sin(phi) * Math.cos(theta),
+    r * Math.cos(phi),
+    r * Math.sin(phi) * Math.sin(theta)
+  );
+}
+starsGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.5, sizeAttenuation: true });
+const stars = new THREE.Points(starsGeo, starsMat);
+scene.add(stars);
+
+// ─── WATER / OCEAN ───
+const waterUniforms = {
+  uTime:        { value: 0 },
+  uClicks:      { value: [] },
+  uClickCount:  { value: 0 },
+  uDayProgress: { value: 0 },
+};
+
+const waterMat = new THREE.ShaderMaterial({
+  uniforms: waterUniforms,
+  vertexShader: `
+    uniform float uTime;
+    uniform float uDayProgress;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying float vFog;
+
+    // up to 10 click-wave events
+    uniform vec4 uClicks[10]; // x, z, startTime, amplitude
+
+    float wave(vec2 p, float t, vec2 dir, float freq, float speed, float amp) {
+      float d = dot(p, dir);
+      return amp * sin(d * freq + t * speed);
+    }
+
+    void main() {
+      vec3 pos = position;
+      float t = uTime;
+
+      // Ocean waves (multiple layers)
+      float h = 0.0;
+      h += wave(pos.xz, t, vec2(1.0, 0.0), 0.3, 1.8, 1.2);
+      h += wave(pos.xz, t, vec2(0.7, 0.7), 0.5, 2.2, 0.7);
+      h += wave(pos.xz, t, vec2(-0.3, 1.0), 0.7, 1.5, 0.4);
+      h += wave(pos.xz, t, vec2(0.5, -0.4), 1.0, 2.8, 0.2);
+      h += wave(pos.xz, t, vec2(-0.8, 0.2), 1.4, 3.2, 0.15);
+
+      // Click ripples
+      for (int i = 0; i < 10; i++) {
+        if (i >= int(uClickCount)) break;
+        vec4 c = uClicks[i];
+        float dt = t - c.w;
+        if (dt > 0.0 && dt < 4.0) {
+          float dist = distance(pos.xz, c.xy);
+          float ring = sin(dist * 3.0 - dt * 6.0) * exp(-dt * 1.2) * exp(-dist * 0.08) * c.z;
+          h += ring * 0.5;
+        }
+      }
+
+      pos.y += h;
+
+      // Compute normal via finite differences
+      float eps = 0.5;
+      float hx1 = wave((pos.xz + vec2(eps, 0.0)), t, vec2(1.0, 0.0), 0.3, 1.8, 1.2)
+                 + wave((pos.xz + vec2(eps, 0.0)), t, vec2(0.7, 0.7), 0.5, 2.2, 0.7)
+                 + wave((pos.xz + vec2(eps, 0.0)), t, vec2(-0.3, 1.0), 0.7, 1.5, 0.4);
+      float hx2 = wave((pos.xz - vec2(eps, 0.0)), t, vec2(1.0, 0.0), 0.3, 1.8, 1.2)
+                 + wave((pos.xz - vec2(eps, 0.0)), t, vec2(0.7, 0.7), 0.5, 2.2, 0.7)
+                 + wave((pos.xz - vec2(eps, 0.0)), t, vec2(-0.3, 1.0), 0.7, 1.5, 0.4);
+      float hz1 = wave((pos.xz + vec2(0.0, eps)), t, vec2(1.0, 0.0), 0.3, 1.8, 1.2)
+                 + wave((pos.xz + vec2(0.0, eps)), t, vec2(0.7, 0.7), 0.5, 2.2, 0.7)
+                 + wave((pos.xz + vec2(0.0, eps)), t, vec2(-0.3, 1.0), 0.7, 1.5, 0.4);
+      float hz2 = wave((pos.xz - vec2(0.0, eps)), t, vec2(1.0, 0.0), 0.3, 1.8, 1.2)
+                 + wave((pos.xz - vec2(0.0, eps)), t, vec2(0.7, 0.7), 0.5, 2.2, 0.7)
+                 + wave((pos.xz - vec2(0.0, eps)), t, vec2(-0.3, 1.0), 0.7, 1.5, 0.4);
+      vNormal = normalize(vec3(hx2 - hx1, 2.0 * eps, hz2 - hz1));
+
+      vWorldPos = pos;
+
+      vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+      vFog = 1.0 - exp(-0.001 * length(mvPos.xyz));
+      gl_Position = projectionMatrix * mvPos;
+    }
+  `,
+  fragmentShader: `
+    uniform float uDayProgress;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying float vFog;
+
+    vec3 dayColor = vec3(0.1, 0.45, 0.65);
+    vec3 sunsetColor = vec3(0.8, 0.35, 0.15);
+    vec3 nightColor = vec3(0.02, 0.05, 0.12);
+    vec3 fogColorDay = vec3(0.53, 0.81, 0.92);
+    vec3 fogColorSunset = vec3(0.9, 0.5, 0.3);
+    vec3 fogColorNight = vec3(0.05, 0.05, 0.15);
+
+    void main() {
+      float dp = uDayProgress;
+      vec3 baseColor;
+      vec3 fogColor;
+      vec3 sunColor;
+
+      if (dp < 0.25) {
+        // Night -> Sunrise
+        float t = dp / 0.25;
+        baseColor = mix(nightColor, sunsetColor, t);
+        fogColor = mix(fogColorNight, fogColorSunset, t);
+        sunColor = mix(vec3(0.3, 0.3, 0.5), vec3(1.0, 0.6, 0.3), t);
+      } else if (dp < 0.5) {
+        // Sunrise -> Day
+        float t = (dp - 0.25) / 0.25;
+        baseColor = mix(sunsetColor, dayColor, t);
+        fogColor = mix(fogColorSunset, fogColorDay, t);
+        sunColor = mix(vec3(1.0, 0.6, 0.3), vec3(1.0, 0.95, 0.9), t);
+      } else if (dp < 0.75) {
+        // Day -> Sunset
+        float t = (dp - 0.5) / 0.25;
+        baseColor = mix(dayColor, sunsetColor, t);
+        fogColor = mix(fogColorDay, fogColorSunset, t);
+        sunColor = mix(vec3(1.0, 0.95, 0.9), vec3(1.0, 0.5, 0.2), t);
+      } else {
+        // Sunset -> Night
+        float t = (dp - 0.75) / 0.25;
+        baseColor = mix(sunsetColor, nightColor, t);
+        fogColor = mix(fogColorSunset, fogColorNight, t);
+        sunColor = mix(vec3(1.0, 0.5, 0.2), vec3(0.3, 0.3, 0.5), t);
+      }
+
+      // Simple lighting
+      vec3 lightDir = normalize(vec3(0.3, 1.0, 0.2));
+      float diff = max(dot(vNormal, lightDir), 0.0) * 0.4 + 0.6;
+
+      vec3 color = baseColor * diff;
+
+      // Specular highlight
+      vec3 viewDir = normalize(cameraPosition - vWorldPos);
+      vec3 halfDir = normalize(lightDir + viewDir);
+      float spec = pow(max(dot(vNormal, halfDir), 0.0), 64.0) * 0.3;
+      color += sunColor * spec;
+
+      // Fresnel
+      float fresnel = pow(1.0 - max(dot(viewDir, vNormal), 0.0), 3.0);
+      color = mix(color, fogColor * 0.5, fresnel * 0.3);
+
+      // Fog
+      color = mix(color, fogColor, vFog);
+
+      gl_FragColor = vec4(color, 0.92);
+    }
+  `,
+  transparent: true,
+  side: THREE.DoubleSide,
+});
+
+const waterGeo = new THREE.PlaneGeometry(1600, 1600, 256, 256);
+waterGeo.rotateX(-Math.PI / 2);
+const water = new THREE.Mesh(waterGeo, waterMat);
+water.receiveShadow = true;
+scene.add(water);
+
+// ─── SHIP ───
+const ship = new THREE.Group();
+
+// Hull
+const hullShape = new THREE.Shape();
+hullShape.moveTo(-8, 0);
+hullShape.bezierCurveTo(-8, -2.5, -3, -4, 0, -4.2);
+hullShape.bezierCurveTo(3, -4, 8, -2.5, 8, 0);
+hullShape.lineTo(7, 0);
+hullShape.bezierCurveTo(7, -1.8, 2.5, -3, 0, -3.2);
+hullShape.bezierCurveTo(-2.5, -3, -7, -1.8, -7, 0);
+hullShape.closePath();
+
+const extrudeSettings = { depth: 20, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 3 };
+const hullGeo = new THREE.ExtrudeGeometry(hullShape, extrudeSettings);
+hullGeo.rotateY(Math.PI / 2);
+hullGeo.translate(0, 0, -10);
+const hullMat = new THREE.MeshPhongMaterial({ color: 0x8B4513, shininess: 40 });
+const hull = new THREE.Mesh(hullGeo, hullMat);
+hull.castShadow = true;
+hull.receiveShadow = true;
+ship.add(hull);
+
+// Deck
+const deckGeo = new THREE.BoxGeometry(12, 0.5, 18);
+deckGeo.translate(0, 0.3, 0);
+const deckMat = new THREE.MeshPhongMaterial({ color: 0xA0522D, shininess: 30 });
+const deck = new THREE.Mesh(deckGeo, deckMat);
+deck.castShadow = true;
+ship.add(deck);
+
+// Cabin
+const cabinGeo = new THREE.BoxGeometry(5, 3, 6);
+cabinGeo.translate(0, 2, -2);
+const cabinMat = new THREE.MeshPhongMaterial({ color: 0xF5F5DC, shininess: 20 });
+const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+cabin.castShadow = true;
+ship.add(cabin);
+
+// Cabin roof
+const roofGeo = new THREE.BoxGeometry(5.6, 0.3, 6.6);
+roofGeo.translate(0, 3.65, -2);
+const roofMat = new THREE.MeshPhongMaterial({ color: 0x8B0000 });
+const roof = new THREE.Mesh(roofGeo, roofMat);
+ship.add(roof);
+
+// Windows on cabin
+for (let i = -1; i <= 1; i++) {
+  const winGeo = new THREE.PlaneGeometry(0.8, 0.8);
+  const winMat = new THREE.MeshPhongMaterial({ color: 0xADD8E6, emissive: 0x224466, emissiveIntensity: 0.3 });
+  const win1 = new THREE.Mesh(winGeo, winMat);
+  win1.position.set(i * 1.8, 2.2, 1.01);
+  ship.add(win1);
+  const win2 = new THREE.Mesh(winGeo, winMat);
+  win2.position.set(i * 1.8, 2.2, -5.01);
+  win2.rotation.y = Math.PI;
+  ship.add(win2);
+}
+
+// Mast
+const mastGeo = new THREE.CylinderGeometry(0.15, 0.2, 14, 8);
+mastGeo.translate(0, 7.5, 0);
+const mastMat = new THREE.MeshPhongMaterial({ color: 0x654321 });
+const mast = new THREE.Mesh(mastGeo, mastMat);
+mast.castShadow = true;
+ship.add(mast);
+
+// Second mast
+const mast2Geo = new THREE.CylinderGeometry(0.12, 0.15, 10, 8);
+mast2Geo.translate(0, 5.5, -4);
+const mast2 = new THREE.Mesh(mast2Geo, mastMat);
+mast2.castShadow = true;
+ship.add(mast2);
+
+// Sail (main) — animated flutter
+const sailGeo = new THREE.PlaneGeometry(5, 8, 16, 16);
+const sailMat = new THREE.MeshPhongMaterial({
+  color: 0xFFFAF0,
+  side: THREE.DoubleSide,
+  shininess: 5,
+});
+const sail = new THREE.Mesh(sailGeo, sailMat);
+sail.position.set(0, 9, 0);
+sail.castShadow = true;
+ship.add(sail);
+
+// Store original sail positions for flutter animation
+const sailOriginalPositions = sailGeo.attributes.position.array.slice();
+
+// Second sail
+const sail2Geo = new THREE.PlaneGeometry(3.5, 5, 12, 12);
+const sail2Mat = new THREE.MeshPhongMaterial({ color: 0xFFF8F0, side: THREE.DoubleSide });
+const sail2 = new THREE.Mesh(sail2Geo, sail2Mat);
+sail2.position.set(0, 6.5, -4);
+sail2.castShadow = true;
+ship.add(sail2);
+const sail2OriginalPositions = sail2Geo.attributes.position.array.slice();
+
+// Flag at top of mast
+const flagGeo = new THREE.PlaneGeometry(2, 1, 8, 4);
+const flagMat = new THREE.MeshPhongMaterial({ color: 0xCC0000, side: THREE.DoubleSide });
+const flag = new THREE.Mesh(flagGeo, flagMat);
+flag.position.set(1, 14.5, 0);
+ship.add(flag);
+const flagOriginalPositions = flagGeo.attributes.position.array.slice();
+
+// Railing
+const railMat = new THREE.MeshPhongMaterial({ color: 0x654321 });
+for (let z = -9; z <= 9; z += 1.5) {
+  for (let side = -1; side <= 1; side += 2) {
+    const postGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6);
+    const post = new THREE.Mesh(postGeo, railMat);
+    post.position.set(side * 5.8, 1.1, z);
+    ship.add(post);
+  }
+}
+// Rail bars
+for (let side = -1; side <= 1; side += 2) {
+  const barGeo = new THREE.CylinderGeometry(0.05, 0.05, 18, 8);
+  barGeo.rotateX(Math.PI / 2);
+  const bar = new THREE.Mesh(barGeo, railMat);
+  bar.position.set(side * 5.8, 1.5, 0);
+  ship.add(bar);
+}
+
+// Lantern on front
+const lanternGeo = new THREE.SphereGeometry(0.4, 8, 8);
+const lanternMat = new THREE.MeshPhongMaterial({ color: 0xFFAA00, emissive: 0xFF6600, emissiveIntensity: 0.8 });
+const lantern = new THREE.Mesh(lanternGeo, lanternMat);
+lantern.position.set(0, 1.0, 9);
+ship.add(lantern);
+
+const lanternLight = new THREE.PointLight(0xff8833, 0.6, 15);
+lanternLight.position.copy(lantern.position);
+ship.add(lanternLight);
+
+// Anchors on sides
+const anchorMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
+for (let side = -1; side <= 1; side += 2) {
+  const anchorGeo = new THREE.TorusGeometry(0.3, 0.08, 8, 12, Math.PI * 1.5);
+  const anchor = new THREE.Mesh(anchorGeo, anchorMat);
+  anchor.position.set(side * 6.0, 0.5, 6);
+  anchor.rotation.z = Math.PI / 2;
+  ship.add(anchor);
+}
+
+ship.position.set(0, 1.5, 0);
+scene.add(ship);
+
+// ─── CLICK WAVE SYSTEM ───
+const clickWaves = [];
+const maxClicks = 10;
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function onMouseClick(event) {
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObject(water);
+  if (intersects.length > 0) {
+    const point = intersects[0].point;
+    clickWaves.push({ x: point.x, z: point.z, startTime: clock.getElapsedTime(), amplitude: 2.0 + Math.random() });
+    if (clickWaves.length > maxClicks) clickWaves.shift();
+  }
+}
+window.addEventListener('click', onMouseClick);
+
+// ─── ORBIT CONTROLS (manual) ───
+let isDragging = false;
+let prevMouse = { x: 0, y: 0 };
+let cameraTheta = 0;
+let cameraPhi = Math.PI / 6;
+let cameraRadius = 30;
+const cameraTarget = new THREE.Vector3(0, 2, 0);
+
+function onMouseDown(e) { isDragging = true; prevMouse = { x: e.clientX, y: e.clientY }; }
+function onMouseUp() { isDragging = false; }
+function onMouseMove(e) {
+  if (!isDragging) return;
+  const dx = e.clientX - prevMouse.x;
+  const dy = e.clientY - prevMouse.y;
+  cameraTheta -= dx * 0.005;
+  cameraPhi = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, cameraPhi - dy * 0.005));
+  prevMouse = { x: e.clientX, y: e.clientY };
+}
+function onWheel(e) { cameraRadius = Math.max(8, Math.min(100, cameraRadius + e.deltaY * 0.05)); }
+
+renderer.domElement.addEventListener('mousedown', onMouseDown);
+window.addEventListener('mouseup', onMouseUp);
+window.addEventListener('mousemove', onMouseMove);
+renderer.domElement.addEventListener('wheel', onWheel);
+
+// Touch support
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }
+}, { passive: true });
+renderer.domElement.addEventListener('touchmove', (e) => {
+  if (!isDragging || e.touches.length !== 1) return;
+  const dx = e.touches[0].clientX - prevMouse.x;
+  const dy = e.touches[0].clientY - prevMouse.y;
+  cameraTheta -= dx * 0.005;
+  cameraPhi = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, cameraPhi - dy * 0.005));
+  prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+renderer.domElement.addEventListener('touchend', () => { isDragging = false; }, { passive: true });
+
+// ─── DAY/NIGHT CYCLE ───
+const DAY_DURATION = 60; // seconds for a full day
+const clock = new THREE.Clock();
+const clockEl = document.getElementById('clock');
+
+function updateDayNight(elapsed) {
+  const dayProgress = (elapsed % DAY_DURATION) / DAY_DURATION; // 0..1
+  waterUniforms.uDayProgress.value = dayProgress;
+
+  // Sun angle: rises at 0.25 (6am), peaks at 0.5 (noon), sets at 0.75 (6pm)
+  const sunAngle = (dayProgress - 0.25) * Math.PI * 2;
+  const sunY = Math.sin(sunAngle) * 300;
+  const sunZ = Math.cos(sunAngle) * 300;
+  sunSphere.position.set(50, sunY, sunZ);
+  moonSphere.position.set(-50, -sunY, -sunZ);
+
+  // Sun color
+  if (dayProgress < 0.2 || dayProgress > 0.8) {
+    sunSphere.material.color.setHex(0xaabbcc);
+    sunLight.intensity = 0.3;
+    ambientLight.intensity = 0.15;
+    ambientLight.color.setHex(0x1a1a3a);
+    hemisphereLight.intensity = 0.1;
+    starsMat.opacity = 1.0;
+    starsMat.transparent = true;
+  } else if (dayProgress < 0.3 || dayProgress > 0.7) {
+    sunSphere.material.color.setHex(0xff8844);
+    sunLight.intensity = 0.8;
+    ambientLight.intensity = 0.3;
+    ambientLight.color.setHex(0x664422);
+    hemisphereLight.intensity = 0.2;
+    starsMat.opacity = 0.2;
+  } else {
+    sunSphere.material.color.setHex(0xffee88);
+    sunLight.intensity = 1.5;
+    ambientLight.intensity = 0.5;
+    ambientLight.color.setHex(0x8899bb);
+    hemisphereLight.intensity = 0.4;
+    starsMat.opacity = 0.0;
+  }
+
+  sunLight.position.copy(sunSphere.position).normalize().multiplyScalar(100);
+
+  // Sky colors
+  if (dayProgress < 0.2 || dayProgress > 0.8) {
+    skyMat.uniforms.topColor.value.setHex(0x0a0a2e);
+    skyMat.uniforms.bottomColor.value.setHex(0x111133);
+    scene.fog.color.setHex(0x0a0a2e);
+    renderer.setClearColor(0x0a0a2e);
+  } else if (dayProgress < 0.3 || dayProgress > 0.7) {
+    skyMat.uniforms.topColor.value.setHex(0x2244aa);
+    skyMat.uniforms.bottomColor.value.setHex(0xff8844);
+    scene.fog.color.setHex(0xcc7744);
+    renderer.setClearColor(0xcc7744);
+  } else {
+    skyMat.uniforms.topColor.value.setHex(0x0077ff);
+    skyMat.uniforms.bottomColor.value.setHex(0xaaddff);
+    scene.fog.color.setHex(0x87CEEB);
+    renderer.setClearColor(0x87CEEB);
+  }
+
+  // Fog density
+  scene.fog.density = (dayProgress > 0.2 && dayProgress < 0.8) ? 0.0015 : 0.003;
+
+  // Clock display
+  const hours = Math.floor(dayProgress * 24);
+  const mins = Math.floor((dayProgress * 24 - hours) * 60);
+  const h = hours.toString().padStart(2, '0');
+  const m = mins.toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const h12 = hours % 12 || 12;
+  clockEl.textContent = `${h12}:${m} ${ampm}`;
+
+  // Lantern glow at night
+  const nightFactor = (dayProgress < 0.2 || dayProgress > 0.8) ? 1.0 :
+                      (dayProgress < 0.3 || dayProgress > 0.7) ? 0.5 : 0.0;
+  lanternLight.intensity = nightFactor * 0.8;
+  lanternMat.emissiveIntensity = 0.3 + nightFactor * 0.7;
+}
+
+// ─── SHIP BOBBING ───
+function updateShip(elapsed) {
+  const baseY = 1.5;
+  const bob = Math.sin(elapsed * 0.8) * 0.3 + Math.sin(elapsed * 1.2) * 0.15;
+  const roll = Math.sin(elapsed * 0.6) * 0.02 + Math.sin(elapsed * 1.0) * 0.01;
+  const pitch = Math.sin(elapsed * 0.5) * 0.015;
+  ship.position.y = baseY + bob;
+  ship.rotation.z = roll;
+  ship.rotation.x = pitch;
+}
+
+// ─── SAIL FLUTTER ───
+function updateSails(elapsed) {
+  const t = elapsed;
+  const pos = sailGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const ox = sailOriginalPositions[i * 3];
+    const oy = sailOriginalPositions[i * 3 + 1];
+    const oz = sailOriginalPositions[i * 3 + 2];
+    const flutter = Math.sin(t * 3 + ox * 2 + oy * 0.5) * 0.3 * (Math.abs(ox) + 0.2);
+    pos.setZ(i, oz + flutter);
+    pos.setX(i, ox + Math.sin(t * 2 + oy) * 0.1);
+  }
+  pos.needsUpdate = true;
+  sailGeo.computeVertexNormals();
+
+  const pos2 = sail2Geo.attributes.position;
+  for (let i = 0; i < pos2.count; i++) {
+    const ox = sail2OriginalPositions[i * 3];
+    const oy = sail2OriginalPositions[i * 3 + 1];
+    const flutter = Math.sin(t * 2.5 + ox * 2.5 + oy * 0.7) * 0.2 * (Math.abs(ox) + 0.2);
+    pos2.setZ(i, sail2OriginalPositions[i * 3 + 2] + flutter);
+  }
+  pos2.needsUpdate = true;
+
+  const fpos = flagGeo.attributes.position;
+  for (let i = 0; i < fpos.count; i++) {
+    const ox = flagOriginalPositions[i * 3];
+    const flutter = Math.sin(t * 5 + ox * 4) * 0.25 * (ox + 1);
+    fpos.setZ(i, flagOriginalPositions[i * 3 + 2] + flutter);
+  }
+  fpos.needsUpdate = true;
+}
+
+// ─── ANIMATION LOOP ───
+function animate() {
+  requestAnimationFrame(animate);
+  const elapsed = clock.getElapsedTime();
+
+  // Update water uniforms
+  waterUniforms.uTime.value = elapsed;
+  const clickData = [];
+  for (const c of clickWaves) {
+    clickData.push(c.x, c.z, c.startTime, c.amplitude);
+  }
+  // Pad to 40 floats (10 * 4)
+  while (clickData.length < 40) clickData.push(0, 0, -100, 0);
+  waterUniforms.uClicks.value = clickData;
+  waterUniforms.uClickCount.value = clickWaves.length;
+
+  updateDayNight(elapsed);
+  updateShip(elapsed);
+  updateSails(elapsed);
+
+  // Camera orbit
+  camera.position.x = cameraTarget.x + cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+  camera.position.y = cameraTarget.y + cameraRadius * Math.cos(cameraPhi);
+  camera.position.z = cameraTarget.z + cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+  camera.lookAt(cameraTarget);
+
+  renderer.render(scene, camera);
+}
+
+// ─── RESIZE ───
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── START ───
+animate();
+</script>
+</body>
+</html>

@@ -20,6 +20,31 @@ Each agent received the **same prompt** and produced a browser-based 3D ship sim
 
 Most tests were done with **Deepseek V4 Flash 0731**.
 
+### Model sizes (total B)
+
+<div>
+<div><b>GLM-5.3 — 744B total · 40B active</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:100%;"></div></div><sub>MoE · ~753B checkpoint</sub></div>
+<br/>
+<div><b>MiMo v2.5 — 310B total · 15B active</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:41.7%;"></div></div><sub>MoE</sub></div>
+<br/>
+<div><b>DeepSeek V4 Flash 0731 — 284B total · 13B active</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:38.2%;"></div></div><sub>MoE · 304B with DSpark module</sub></div>
+<br/>
+<div><b>Qwen3.6-35B-A3B — 35B total · 3B active</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:4.7%;min-width:8px;"></div></div><sub>MoE</sub></div>
+<br/>
+<div><b>Qwen3.8-27B — 27B total · dense</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:3.6%;min-width:8px;"></div></div><sub>dense</sub></div>
+<br/>
+<div><b>Muse Spark 1.3 — undisclosed</b><br/><sub>proprietary, closed · size not published</sub></div>
+</div>
+
+| Model | Size in B (total) | Active in B | Type |
+|-------|-------------------|-------------|------|
+| GLM-5.3 | 744 | 40 | MoE |
+| MiMo v2.5 | 310 | 15 | MoE |
+| DeepSeek V4 Flash 0731 | 284 (304 with DSpark) | 13 | MoE |
+| Qwen3.6-35B-A3B | 35 | 3 | MoE |
+| Qwen3.8-27B | 27 | 27 | dense |
+| Muse Spark 1.3 | undisclosed | undisclosed | proprietary, closed |
+
 ## The Agents
 
 | Agent | Simulator | Approach |
