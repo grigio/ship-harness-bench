@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Serenity — A Ship at Sea</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1020; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5;
+    background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 45%, rgba(4,8,18,0.35) 100%);
+  }
+
+  .ui { position: fixed; z-index: 10; color: #f4f7ff; text-shadow: 0 2px 14px rgba(0,0,0,0.6); pointer-events: none; }
+
+  #title { top: 34px; left: 40px; }
+  #title h1 {
+    font-size: 30px; font-weight: 300; letter-spacing: 0.32em; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  #title p { font-size: 13px; font-weight: 300; letter-spacing: 0.12em; opacity: 0.78; }
+
+  #clock {
+    top: 38px; right: 42px; text-align: right;
+  }
+  #clock .phase { font-size: 26px; font-weight: 300; letter-spacing: 0.18em; }
+  #clock .time { font-size: 12px; opacity: 0.7; letter-spacing: 0.16em; margin-top: 6px; }
+
+  #help {
+    bottom: 30px; left: 40px; font-size: 12px; font-weight: 300; letter-spacing: 0.08em;
+    line-height: 1.9; opacity: 0.8;
+  }
+  #help b { font-weight: 600; opacity: 0.95; }
+  #help .key {
+    display: inline-block; min-width: 20px; padding: 1px 6px; margin-right: 3px;
+    border: 1px solid rgba(255,255,255,0.35); border-radius: 5px; font-size: 11px; text-align: center;
+  }
+
+  #hint {
+    bottom: 34px; right: 42px; font-size: 12px; letter-spacing: 0.14em; opacity: 0.65;
+    transition: opacity 1.2s ease;
+  }
+
+  #loader {
+    position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+    background: #0a1020; color: #cdd8f0; letter-spacing: 0.35em; font-size: 13px; font-weight: 300;
+    transition: opacity 1.4s ease; text-transform: uppercase;
+  }
+  #loader.hidden { opacity: 0; pointer-events: none; }
+
+  @media (max-width: 640px) {
+    #title { top: 22px; left: 22px; }
+    #title h1 { font-size: 22px; }
+    #clock { top: 24px; right: 22px; }
+    #help { bottom: 20px; left: 22px; font-size: 11px; }
+    #hint { display: none; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="loader">Setting sail…</div>
+<div id="vignette"></div>
+
+<div class="ui" id="title">
+  <h1>Serenity</h1>
+  <p>A little ship, an endless sea</p>
+</div>
+
+<div class="ui" id="clock">
+  <div class="phase" id="phase">Daybreak</div>
+  <div class="time" id="time">06:00 · gentle seas</div>
+</div>
+
+<div class="ui" id="help">
+  <div><span class="key">W</span><span class="key">S</span> <b>sail</b> &nbsp;&nbsp; <span class="key">A</span><span class="key">D</span> <b>steer</b></div>
+  <div><b>Drag</b> to look around &nbsp;·&nbsp; <b>Click the sea</b> to raise a wave</div>
+</div>
+
+<div class="ui" id="hint">scroll to zoom</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ------------------------------------------------------------------ *
+ *  Basic setup
+ * ------------------------------------------------------------------ */
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.NoToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.set(-16, 8, 22);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 10;
+controls.maxDistance = 55;
+controls.maxPolarAngle = Math.PI * 0.49;   // stay above the water
+controls.minPolarAngle = 0.12;
+controls.enablePan = false;
+
+const clock = new THREE.Clock();
+const DAY_LENGTH = 150; // seconds for a full day/night cycle
+
+/* ------------------------------------------------------------------ *
+ *  Small colour helpers
+ * ------------------------------------------------------------------ */
+const c = (hex) => new THREE.Color(hex);
+const lerpC = (a, b, t, out = new THREE.Color()) => out.copy(a).lerp(b, t);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
+
+const PAL = {
+  dayTop:     c(0x4b8fd6), dayHorizon: c(0xd8ecff),
+  nightTop:   c(0x050a18), nightHorizon: c(0x121d3a),
+  duskTop:    c(0x33407a), duskHorizon: c(0xffa070),
+  sunDay:     c(0xfff3df), sunLow: c(0xffb073),
+  deepDay:    c(0x0b4f66), shallowDay: c(0x2aa7a8),
+  deepNight:  c(0x031726), shallowNight: c(0x0a4a55),
+};
+
+const tmpA = new THREE.Color(), tmpB = new THREE.Color();
+
+/* ------------------------------------------------------------------ *
+ *  Ripples — shared between the water shader and the ship physics
+ * ------------------------------------------------------------------ */
+const MAX_RIPPLES = 8;
+const ripples = [];             // { x, z, t, strength }
+const rippleVecs = Array.from({ length: MAX_RIPPLES }, () => new THREE.Vector4(0, 0, -100, 0));
+
+function addRipple(x, z, strength = 1.2) {
+  ripples.push({ x, z, t: clock.getElapsedTime(), strength });
+  if (ripples.length > MAX_RIPPLES) ripples.shift();
+}
+
+/* Wave field — identical maths in GLSL and JS so the ship rides the water */
+const WAVE_GLSL = `
+float waveHeight(vec2 p, float t) {
+  float h = 0.0;
+  h += sin(p.x * 0.12 + t * 0.90) * 0.45;
+  h += sin(p.y * 0.17 - t * 0.70) * 0.30;
+  h += sin((p.x + p.y) * 0.09 + t * 0.55) * 0.35;
+  h += sin((p.x - p.y) * 0.22 - t * 1.25) * 0.12;
+  return h;
+}
+float rippleHeight(vec2 p, float t) {
+  float h = 0.0;
+  for (int i = 0; i < MAX_RIPPLES; i++) {
+    if (i >= uRippleCount) break;
+    vec4 r = uRipples[i];
+    float age = t - r.z;
+    if (age < 0.0 || age > 8.0) continue;
+    float d = distance(p, r.xy);
+    float front = age * 3.5;
+    float band = sin((d - front) * 2.2);
+    float env = exp(-abs(d - front) * 0.65) * exp(-age * 0.45);
+    h += band * env * r.w;
+  }
+  return h;
+}
+float totalHeight(vec2 p, float t) { return waveHeight(p, t) + rippleHeight(p, t); }
+`;
+
+function waveJS(x, z, t) {
+  return Math.sin(x * 0.12 + t * 0.90) * 0.45
+       + Math.sin(z * 0.17 - t * 0.70) * 0.30
+       + Math.sin((x + z) * 0.09 + t * 0.55) * 0.35
+       + Math.sin((x - z) * 0.22 - t * 1.25) * 0.12;
+}
+function ripplesJS(x, z, t) {
+  let h = 0;
+  for (const r of ripples) {
+    const age = t - r.t;
+    if (age < 0 || age > 8) continue;
+    const d = Math.hypot(x - r.x, z - r.z);
+    const front = age * 3.5;
+    h += Math.sin((d - front) * 2.2) * Math.exp(-Math.abs(d - front) * 0.65) * Math.exp(-age * 0.45) * r.strength;
+  }
+  return h;
+}
+const waterHeightAt = (x, z, t) => waveJS(x, z, t) + ripplesJS(x, z, t);
+
+/* ------------------------------------------------------------------ *
+ *  Ocean — displaced plane with a hand-written lit shader
+ * ------------------------------------------------------------------ */
+const waterUniforms = {
+  uTime:        { value: 0 },
+  uRipples:     { value: rippleVecs },
+  uRippleCount: { value: 0 },
+  uSunDir:      { value: new THREE.Vector3(0, 1, 0) },
+  uSunColor:    { value: c(0xfff3df).clone() },
+  uAmbient:     { value: 0.45 },
+  uDay:         { value: 1 },
+  uDeep:        { value: c(0x0b4f66).clone() },
+  uShallow:     { value: c(0x2aa7a8).clone() },
+  uSky:         { value: c(0xbcdcff).clone() },
+  uHorizon:     { value: c(0xd8ecff).clone() },
+};
+
+const waterMaterial = new THREE.ShaderMaterial({
+  uniforms: waterUniforms,
+  defines: { MAX_RIPPLES },
+  vertexShader: `
+    uniform float uTime;
+    uniform vec4 uRipples[MAX_RIPPLES];
+    uniform int  uRippleCount;
+    varying vec3 vWorld;
+    varying vec3 vNormal;
+    varying float vHeight;
+    varying float vRipple;
+    ${WAVE_GLSL}
+    void main() {
+      vec2 p = position.xz;
+      float h = totalHeight(p, uTime);
+      float eps = 0.6;
+      float hR = totalHeight(p + vec2(eps, 0.0), uTime);
+      float hL = totalHeight(p - vec2(eps, 0.0), uTime);
+      float hU = totalHeight(p + vec2(0.0, eps), uTime);
+      float hD = totalHeight(p - vec2(0.0, eps), uTime);
+      vNormal = normalize(vec3(-(hR - hL), 2.0 * eps, -(hU - hD)));
+      vHeight = h;
+      vRipple = abs(rippleHeight(p, uTime));
+      vec3 transformed = position;
+      transformed.y += h;
+      vec4 world = modelMatrix * vec4(transformed, 1.0);
+      vWorld = world.xyz;
+      gl_Position = projectionMatrix * viewMatrix * world;
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uSunDir;
+    uniform vec3 uSunColor;
+    uniform float uAmbient;
+    uniform float uDay;
+    uniform vec3 uDeep;
+    uniform vec3 uShallow;
+    uniform vec3 uSky;
+    uniform vec3 uHorizon;
+    varying vec3 vWorld;
+    varying vec3 vNormal;
+    varying float vHeight;
+    varying float vRipple;
+    void main() {
+      vec3 N = normalize(vNormal);
+      vec3 V = normalize(cameraPosition - vWorld);
+      vec3 L = normalize(uSunDir);
+      float diff = max(dot(N, L), 0.0);
+      vec3 H = normalize(L + V);
+      float spec = pow(max(dot(N, H), 0.0), 90.0);
+
+      vec3 base = mix(uDeep, uShallow, smoothstep(-1.1, 1.1, vHeight));
+      vec3 col = base * (uAmbient + diff * 0.65);
+      col += uSunColor * spec * 1.6 * uDay;
+
+      float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+      col = mix(col, uSky, fres * 0.32);
+
+      float foam = smoothstep(1.0, 1.5, vHeight) * 0.45 + vRipple * 0.42;
+      col = mix(col, vec3(0.93, 0.97, 1.0), clamp(foam, 0.0, 0.55) * (0.35 + 0.65 * uDay));
+
+      float dist = length(vWorld.xz - cameraPosition.xz);
+      col = mix(col, uHorizon, smoothstep(90.0, 280.0, dist) * 0.85);
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `,
+});
+
+const oceanGeo = new THREE.PlaneGeometry(700, 700, 220, 220);
+oceanGeo.rotateX(-Math.PI / 2);
+const ocean = new THREE.Mesh(oceanGeo, waterMaterial);
+scene.add(ocean);
+
+/* ------------------------------------------------------------------ *
+ *  Sky dome with sun glow + stars
+ * ------------------------------------------------------------------ */
+const skyUniforms = {
+  uTop:     { value: c(0x4b8fd6).clone() },
+  uHorizon: { value: c(0xd8ecff).clone() },
+  uSunDir:  { value: new THREE.Vector3(0, 1, 0) },
+  uSunCol:  { value: c(0xfff3df).clone() },
+  uDay:     { value: 1 },
+};
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(800, 32, 20),
+  new THREE.ShaderMaterial({
+    uniforms: skyUniforms,
+    side: THREE.BackSide,
+    depthWrite: false,
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uTop;
+      uniform vec3 uHorizon;
+      uniform vec3 uSunDir;
+      uniform vec3 uSunCol;
+      uniform float uDay;
+      varying vec3 vDir;
+      void main() {
+        vec3 d = normalize(vDir);
+        float h = d.y;
+        vec3 col = mix(uHorizon, uTop, smoothstep(-0.08, 0.65, h));
+        float sd = max(dot(d, normalize(uSunDir)), 0.0);
+        col += uSunCol * pow(sd, 220.0) * 1.5;
+        col += uSunCol * pow(sd, 12.0) * 0.28;
+        col += uSunCol * pow(sd, 3.0) * 0.06;
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  })
+);
+sky.renderOrder = -1;
+scene.add(sky);
+
+// Stars
+const starGeo = new THREE.BufferGeometry();
+const starPos = [];
+for (let i = 0; i < 1800; i++) {
+  const u = Math.random(), v = Math.random();
+  const theta = u * Math.PI * 2, phi = Math.acos(2 * v - 1);
+  const r = 700;
+  starPos.push(r * Math.sin(phi) * Math.cos(theta), Math.abs(r * Math.cos(phi)) * 0.98 + 4, r * Math.sin(phi) * Math.sin(theta));
+}
+starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false });
+const stars = new THREE.Points(starGeo, starMat);
+scene.add(stars);
+
+// Sun disc + glow, and a soft moon at night
+function radialTexture(inner, outer) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, inner); g.addColorStop(1, outer);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(cv);
+}
+const glowTex = radialTexture('rgba(255,255,255,1)', 'rgba(255,255,255,0)');
+
+const sun = new THREE.Mesh(
+  new THREE.SphereGeometry(7, 24, 16),
+  new THREE.MeshBasicMaterial({ color: 0xfff3df, fog: false })
+);
+const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffd9a0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.85 }));
+sunGlow.scale.set(90, 90, 1);
+const sunGroup = new THREE.Group();
+sunGroup.add(sun, sunGlow);
+scene.add(sunGroup);
+
+const moon = new THREE.Mesh(
+  new THREE.SphereGeometry(4.5, 20, 14),
+  new THREE.MeshBasicMaterial({ color: 0xdfe8ff, transparent: true, opacity: 0, fog: false })
+);
+const moonGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x9fb8ff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
+moonGlow.scale.set(45, 45, 1);
+const moonGroup = new THREE.Group();
+moonGroup.add(moon, moonGlow);
+scene.add(moonGroup);
+
+/* ------------------------------------------------------------------ *
+ *  Clouds — soft, slow, and subtle
+ * ------------------------------------------------------------------ */
+const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.72, depthWrite: false });
+const clouds = new THREE.Group();
+for (let i = 0; i < 14; i++) {
+  const cluster = new THREE.Group();
+  const puffs = 3 + (i % 3);
+  for (let j = 0; j < puffs; j++) {
+    const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), cloudMat);
+    puff.scale.set(5 + Math.random() * 6, 1.6 + Math.random() * 1.4, 3 + Math.random() * 3);
+    puff.position.set((j - puffs / 2) * 5 + Math.random() * 3, Math.random() * 1.5, Math.random() * 3 - 1.5);
+    cluster.add(puff);
+  }
+  const ang = Math.random() * Math.PI * 2, rad = 120 + Math.random() * 180;
+  cluster.position.set(Math.cos(ang) * rad, 34 + Math.random() * 22, Math.sin(ang) * rad);
+  cluster.userData.speed = 0.25 + Math.random() * 0.35;
+  clouds.add(cluster);
+}
+scene.add(clouds);
+
+/* ------------------------------------------------------------------ *
+ *  Lights
+ * ------------------------------------------------------------------ */
+const sunLight = new THREE.DirectionalLight(0xfff3df, 1.3);
+scene.add(sunLight);
+const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x113344, 0.7);
+scene.add(hemi);
+
+/* ------------------------------------------------------------------ *
+ *  The ship
+ * ------------------------------------------------------------------ */
+const ship = new THREE.Group();          // position + heading
+const shipTilt = new THREE.Group();      // pitch + roll from the waves
+ship.add(shipTilt);
+scene.add(ship);
+
+const hullMat = new THREE.MeshStandardMaterial({ color: 0x6b3f2a, roughness: 0.62, metalness: 0.05 });
+const trimMat = new THREE.MeshStandardMaterial({ color: 0xe8d8bd, roughness: 0.7 });
+const deckMat = new THREE.MeshStandardMaterial({ color: 0xb98b5e, roughness: 0.85 });
+const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf5f2e8, roughness: 0.9, side: THREE.DoubleSide });
+const sailMat = new THREE.MeshStandardMaterial({ color: 0xfaf6ea, roughness: 0.95, side: THREE.DoubleSide, transparent: true, opacity: 0.96 });
+const windowMat = new THREE.MeshStandardMaterial({ color: 0x2c4a5c, roughness: 0.25, metalness: 0.3 });
+
+// Hull from a boat-shaped outline, extruded with a rounded bevel.
+const shape = new THREE.Shape();
+shape.moveTo(6.2, 0);
+shape.bezierCurveTo(4.5, 1.5, 1.5, 2.15, -2.2, 2.05);
+shape.bezierCurveTo(-4.3, 2.0, -5.4, 1.1, -5.6, 0);
+shape.bezierCurveTo(-5.4, -1.1, -4.3, -2.0, -2.2, -2.05);
+shape.bezierCurveTo(1.5, -2.15, 4.5, -1.5, 6.2, 0);
+const hullGeo = new THREE.ExtrudeGeometry(shape, {
+  depth: 1.9, bevelEnabled: true, bevelThickness: 0.55, bevelSize: 0.45, bevelSegments: 3, curveSegments: 16,
+});
+hullGeo.rotateX(-Math.PI / 2);
+hullGeo.translate(0, 0.15, 0);
+const hull = new THREE.Mesh(hullGeo, hullMat);
+shipTilt.add(hull);
+
+// Deck
+const deckShape = new THREE.Shape();
+deckShape.moveTo(5.4, 0);
+deckShape.bezierCurveTo(4.0, 1.15, 1.4, 1.75, -2.1, 1.7);
+deckShape.bezierCurveTo(-4.0, 1.65, -4.9, 0.9, -5.0, 0);
+deckShape.bezierCurveTo(-4.9, -0.9, -4.0, -1.65, -2.1, -1.7);
+deckShape.bezierCurveTo(1.4, -1.75, 4.0, -1.15, 5.4, 0);
+const deckGeo = new THREE.ShapeGeometry(deckShape, 16);
+deckGeo.rotateX(-Math.PI / 2);
+const deck = new THREE.Mesh(deckGeo, deckMat);
+deck.position.y = 2.42;
+shipTilt.add(deck);
+
+// Cabin
+const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.35, 2.3), whiteMat);
+cabin.position.set(-2.0, 3.15, 0);
+shipTilt.add(cabin);
+const cabinRoof = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.14, 2.6), trimMat);
+cabinRoof.position.set(-2.0, 3.9, 0);
+shipTilt.add(cabinRoof);
+for (const z of [-1.16, 1.16]) {
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.55, 0.08), windowMat);
+  win.position.set(-2.0, 3.3, z);
+  shipTilt.add(win);
+}
+for (const x of [-2.95, -1.05]) {
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.7), windowMat);
+  win.position.set(x, 3.3, 0);
+  shipTilt.add(win);
+}
+
+// Mast + boom + sails
+const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.16, 10.5, 10), trimMat);
+mast.position.set(0.9, 7.45, 0);
+shipTilt.add(mast);
+const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 5.6, 8), trimMat);
+boom.rotation.z = Math.PI / 2;
+boom.position.set(0.9, 5.2, 0);
+shipTilt.add(boom);
+
+function makeSail(w, h, bulge) {
+  const g = new THREE.PlaneGeometry(w, h, 12, 12);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i);
+    const depth = Math.sin((x / w + 0.5) * Math.PI) * Math.sin((y / h + 0.5) * Math.PI) * bulge;
+    pos.setZ(i, depth);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+const mainSail = new THREE.Mesh(makeSail(5.2, 4.4, 0.85), sailMat);
+mainSail.position.set(0.9, 7.45, 0);
+mainSail.rotation.y = -0.12;
+shipTilt.add(mainSail);
+const jib = new THREE.Mesh(makeSail(3.5, 3.2, 0.55), sailMat);
+jib.position.set(3.5, 8.0, 0);
+jib.rotation.y = 0.28;
+shipTilt.add(jib);
+
+// Little flag at the masthead
+const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.7, 8, 1), new THREE.MeshStandardMaterial({ color: 0xd9604f, side: THREE.DoubleSide, roughness: 0.9 }));
+flag.position.set(0.9 + 0.75, 12.5, 0);
+shipTilt.add(flag);
+
+// Soft wake behind the ship
+const wakeTex = radialTexture('rgba(255,255,255,0.85)', 'rgba(255,255,255,0)');
+const wake = new THREE.Mesh(
+  new THREE.PlaneGeometry(1, 1),
+  new THREE.MeshBasicMaterial({ map: wakeTex, transparent: true, opacity: 0, depthWrite: false, color: 0xdff3ff })
+);
+wake.rotation.x = -Math.PI / 2;
+wake.scale.set(16, 5, 1);
+wake.position.set(-6.5, 0.05, 0);
+shipTilt.add(wake);
+
+/* ------------------------------------------------------------------ *
+ *  Ship state + simple controls
+ * ------------------------------------------------------------------ */
+const shipState = { x: 0, z: 0, heading: -0.35, speed: 0, throttle: 0, rudder: 0 };
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  keys[k] = true;
+  if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
+});
+window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+/* ------------------------------------------------------------------ *
+ *  Click the water -> ripple
+ * ------------------------------------------------------------------ */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const hitPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const hitPoint = new THREE.Vector3();
+let down = null;
+
+renderer.domElement.addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!down) return;
+  const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+  down = null;
+  if (moved > 6) return; // that was a drag, not a click
+  pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  if (raycaster.ray.intersectPlane(hitPlane, hitPoint)) {
+    addRipple(hitPoint.x, hitPoint.z, 1.35);
+    const hint = document.getElementById('hint');
+    if (hint) hint.style.opacity = '0';
+  }
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ------------------------------------------------------------------ *
+ *  Main loop
+ * ------------------------------------------------------------------ */
+const phaseEl = document.getElementById('phase');
+const timeEl = document.getElementById('time');
+const loader = document.getElementById('loader');
+let loaderHidden = false;
+
+const shipFwd = new THREE.Vector3(), shipRight = new THREE.Vector3();
+const camDelta = new THREE.Vector3();
+let lastClockPhase = '';
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.getElapsedTime();
+
+  /* --- Sun & day/night --- */
+  const angle = (t / DAY_LENGTH) * Math.PI * 2 + Math.PI * 0.06; // start near dawn
+  const sunDir = new THREE.Vector3(Math.cos(angle) * 0.85, Math.sin(angle), 0.32).normalize();
+  const sunY = sunDir.y;
+  const day = smoothstep(-0.08, 0.28, sunY);
+  const dusk = 1 - smoothstep(0.02, 0.42, Math.abs(sunY));
+
+  // Sun / moon placement
+  sunGroup.position.copy(sunDir).multiplyScalar(360);
+  sun.material.color.copy(lerpC(PAL.sunLow, PAL.sunDay, day, tmpA));
+  sunGlow.material.color.copy(tmpA);
+  sunGlow.material.opacity = 0.25 + 0.6 * day;
+  sun.visible = sunGlow.visible = sunY > -0.12;
+
+  const moonDir = sunDir.clone().multiplyScalar(-1);
+  moonGroup.position.copy(moonDir).multiplyScalar(360);
+  const night = 1 - day;
+  moon.material.opacity = night * 0.9;
+  moonGlow.material.opacity = night * 0.28;
+  starMat.opacity = night * 0.9;
+  stars.rotation.y += dt * 0.002;
+
+  // Palettes
+  const top = lerpC(PAL.nightTop, PAL.dayTop, day, tmpA).lerp(PAL.duskTop, dusk * 0.55);
+  const horizon = lerpC(PAL.nightHorizon, PAL.dayHorizon, day, tmpB).lerp(PAL.duskHorizon, dusk * 0.85);
+  skyUniforms.uTop.value.copy(top);
+  skyUniforms.uHorizon.value.copy(horizon);
+  skyUniforms.uSunDir.value.copy(sunDir);
+  skyUniforms.uSunCol.value.copy(lerpC(PAL.sunLow, PAL.sunDay, day, tmpA));
+  skyUniforms.uDay.value = day;
+
+  const sunCol = lerpC(PAL.sunLow, PAL.sunDay, day, tmpA);
+  waterUniforms.uSunDir.value.copy(sunDir);
+  waterUniforms.uSunColor.value.copy(sunCol);
+  waterUniforms.uAmbient.value = 0.16 + 0.38 * day;
+  waterUniforms.uDay.value = day;
+  waterUniforms.uDeep.value.copy(lerpC(PAL.deepNight, PAL.deepDay, day, tmpA));
+  waterUniforms.uShallow.value.copy(lerpC(PAL.shallowNight, PAL.shallowDay, day, tmpB));
+  waterUniforms.uSky.value.copy(top);
+  waterUniforms.uHorizon.value.copy(horizon);
+  waterUniforms.uTime.value = t;
+
+  sunLight.position.copy(sunDir).multiplyScalar(200);
+  sunLight.color.copy(sunCol);
+  sunLight.intensity = 0.08 + 1.35 * day;
+  hemi.intensity = 0.28 + 0.55 * day;
+  hemi.color.copy(lerpC(c(0x243b6b), c(0xcfe6ff), day, tmpA));
+  cloudMat.color.copy(lerpC(c(0x2a3350), c(0xffffff), day, tmpA));
+
+  /* --- Ripples -> uniforms --- */
+  while (ripples.length && t - ripples[0].t > 8) ripples.shift();
+  for (let i = 0; i < MAX_RIPPLES; i++) {
+    if (i < ripples.length) {
+      const r = ripples[i];
+      rippleVecs[i].set(r.x, r.z, r.t, r.strength);
+    } else {
+      rippleVecs[i].set(0, 0, -100, 0);
+    }
+  }
+  waterUniforms.uRippleCount.value = ripples.length;
+
+  /* --- Ship controls & physics --- */
+  if (keys['w'] || keys['arrowup']) shipState.throttle = clamp(shipState.throttle + dt * 0.5, -0.4, 1);
+  if (keys['s'] || keys['arrowdown']) shipState.throttle = clamp(shipState.throttle - dt * 0.5, -0.4, 1);
+  if (keys['a'] || keys['arrowleft']) shipState.rudder = clamp(shipState.rudder + dt * 1.4, -1, 1);
+  if (keys['d'] || keys['arrowright']) shipState.rudder = clamp(shipState.rudder - dt * 1.4, -1, 1);
+  shipState.rudder *= Math.pow(0.2, dt); // auto-centre the helm
+
+  const targetSpeed = shipState.throttle * 6.5;
+  shipState.speed += (targetSpeed - shipState.speed) * Math.min(1, dt * 0.8);
+  shipState.heading += shipState.rudder * shipState.speed * dt * 0.16;
+
+  shipFwd.set(Math.cos(shipState.heading), 0, -Math.sin(shipState.heading));
+  shipRight.set(-shipFwd.z, 0, shipFwd.x);
+  shipState.x += shipFwd.x * shipState.speed * dt;
+  shipState.z += shipFwd.z * shipState.speed * dt;
+
+  const h = waterHeightAt(shipState.x, shipState.z, t);
+  ship.position.set(shipState.x, h + 0.15, shipState.z);
+  ship.rotation.y = shipState.heading;
+
+  const eps = 1.7;
+  const hF = waterHeightAt(shipState.x + shipFwd.x * eps, shipState.z + shipFwd.z * eps, t);
+  const hB = waterHeightAt(shipState.x - shipFwd.x * eps, shipState.z - shipFwd.z * eps, t);
+  const hR = waterHeightAt(shipState.x + shipRight.x * eps, shipState.z + shipRight.z * eps, t);
+  const hL = waterHeightAt(shipState.x - shipRight.x * eps, shipState.z - shipRight.z * eps, t);
+  shipTilt.rotation.x = Math.atan2(hB - hF, 2 * eps) * 0.9;
+  shipTilt.rotation.z = Math.atan2(hR - hL, 2 * eps) * 0.9;
+
+  wake.material.opacity = clamp(Math.abs(shipState.speed) / 6.5, 0, 1) * 0.5;
+
+  // Flag flutter
+  flag.rotation.y = Math.sin(t * 3.1) * 0.25 + Math.sin(t * 5.3) * 0.1;
+
+  // Camera follows the ship while keeping the user's orbit angle
+  camDelta.set(ship.position.x - controls.target.x, (h + 2.2) - controls.target.y, ship.position.z - controls.target.z);
+  camera.position.add(camDelta);
+  controls.target.copy(ship.position).setY(h + 2.2);
+  controls.update();
+
+  // Clouds drift and wrap around
+  for (const cl of clouds.children) {
+    cl.position.x += cl.userData.speed * dt;
+    if (cl.position.x > 320) cl.position.x = -320;
+  }
+
+  /* --- UI --- */
+  // angle 0 = sunrise, so shift the clock by six hours
+  const minutes = Math.floor((angle / (Math.PI * 2) * 24 * 60 + 6 * 60) % (24 * 60));
+  const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const mm = String(minutes % 60).padStart(2, '0');
+  let phase = 'Starlit night';
+  if (dusk > 0.4) phase = sunY > 0 ? 'Golden hour' : 'Twilight';
+  else if (day > 0.25) phase = minutes < 12 * 60 ? 'Morning' : 'Afternoon';
+  else if (day > 0.05) phase = 'Twilight';
+  if (phase !== lastClockPhase) { phaseEl.textContent = phase; lastClockPhase = phase; }
+  timeEl.textContent = `${hh}:${mm} · ${shipState.speed > 0.5 ? 'under way' : 'gentle seas'}`;
+
+  if (!loaderHidden && t > 0.4) { loader.classList.add('hidden'); loaderHidden = true; }
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

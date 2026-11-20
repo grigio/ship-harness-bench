@@ -29,6 +29,8 @@ Most tests were done with **Deepseek V4 Flash 0731**.
 <br/>
 <div><b>DeepSeek V4 Flash 0731 — 284B total · 13B active</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:38.2%;"></div></div><sub>MoE · 304B with DSpark module</sub></div>
 <br/>
+<div><b>Hy4 flash — 220B total · 12B active</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:29.6%;"></div></div><sub>MoE · incl. 64B Engram · 1M context</sub></div>
+<br/>
 <div><b>Qwen3.6-35B-A3B — 35B total · 3B active</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:4.7%;min-width:8px;"></div></div><sub>MoE</sub></div>
 <br/>
 <div><b>Qwen3.8-27B — 27B total · dense</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:3.6%;min-width:8px;"></div></div><sub>dense</sub></div>
@@ -41,6 +43,7 @@ Most tests were done with **Deepseek V4 Flash 0731**.
 | GLM-5.3 | 744 | 40 | MoE |
 | MiMo v2.5 | 310 | 15 | MoE |
 | DeepSeek V4 Flash 0731 | 284 (304 with DSpark) | 13 | MoE |
+| Hy4 flash | 220 (incl. 64B Engram) | 12 | MoE |
 | Qwen3.6-35B-A3B | 35 | 3 | MoE |
 | Qwen3.8-27B | 27 | 27 | dense |
 | Muse Spark 1.3 | undisclosed | undisclosed | proprietary, closed |
@@ -58,6 +61,8 @@ Most tests were done with **Deepseek V4 Flash 0731**.
 | [Muse](./ship-sim-o-muse-1.2/) | Drift | Vite build + custom fonts |
 | [OpenCode](./ship-sim-opencode/) | Sunset Sail | Vendored Three.js |
 | [Pi](./ship-sim-pi/) | A Quiet Sea | TypeScript + Vite + seagulls/audio |
+| [Hy4 flash — OpenCode](./ship-hy4-flash-opencode/) | Serenity | Import maps + CDN Three.js, shader ocean + click ripples |
+| [Q3.8 27B — Pi (gsq)](./ship-q3.8-27b-pi-gsq/) | Adrift | Vendored Three.js, shader swell + click ripples |
 
 ## Takeaways
 
