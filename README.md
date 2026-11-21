@@ -35,6 +35,8 @@ Most tests were done with **Deepseek V4 Flash 0731**.
 <br/>
 <div><b>Qwen3.8-27B — 27B total · dense</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:3.6%;min-width:8px;"></div></div><sub>dense</sub></div>
 <br/>
+<div><b>Inkling-2-Mini — 26.4B total · 3.4B active</b><br/><div style="background:#e5e7eb;border-radius:999px;height:14px;width:100%;max-width:500px;"><div style="background:#3b82f6;border-radius:999px;height:14px;width:3.5%;min-width:8px;"></div></div><sub>MoE · looped · 5.4B weight activations/token</sub></div>
+<br/>
 <div><b>Muse Spark 1.3 — undisclosed</b><br/><sub>proprietary, closed · size not published</sub></div>
 </div>
 
@@ -46,6 +48,7 @@ Most tests were done with **Deepseek V4 Flash 0731**.
 | Hy4 flash | 220 (incl. 64B Engram) | 12 | MoE |
 | Qwen3.6-35B-A3B | 35 | 3 | MoE |
 | Qwen3.8-27B | 27 | 27 | dense |
+| Inkling-2-Mini | 26.4 | 3.4 (5.4 w/ looping) | MoE · looped |
 | Muse Spark 1.3 | undisclosed | undisclosed | proprietary, closed |
 
 ## The Agents
@@ -63,6 +66,7 @@ Most tests were done with **Deepseek V4 Flash 0731**.
 | [Pi](./ship-sim-pi/) | A Quiet Sea | TypeScript + Vite + seagulls/audio |
 | [Hy4 flash — OpenCode](./ship-hy4-flash-opencode/) | Serenity | Import maps + CDN Three.js, shader ocean + click ripples |
 | [Q3.8 27B — Pi (gsq)](./ship-q3.8-27b-pi-gsq/) | Adrift | Vendored Three.js, shader swell + click ripples |
+| [Inkling-2-Mini — Pi](./ship-Inkling-2-Mini-pi/) | Horizon | Import maps + Three.js, shader sky + click ripples |
 
 ## Takeaways
 
