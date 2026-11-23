@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Horizon — a quiet sea</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0b1026; font-family:Georgia, 'Times New Roman', serif; }
+  #scene { position:fixed; inset:0; display:block; cursor:crosshair; }
+  .ui { position:fixed; pointer-events:none; z-index:10; color:#fff; }
+  #title { top:28px; left:32px; }
+  #title h1 { font-size:26px; font-weight:400; letter-spacing:6px; text-transform:uppercase; opacity:.92; text-shadow:0 2px 18px rgba(0,0,0,.5); }
+  #title p { font-size:12px; letter-spacing:2px; opacity:.6; margin-top:6px; font-style:italic; }
+  #clock { top:28px; right:32px; text-align:right; }
+  #clock .phase { font-size:14px; letter-spacing:3px; text-transform:uppercase; opacity:.9; }
+  #clock .t { font-size:11px; opacity:.55; margin-top:6px; letter-spacing:2px; }
+  #hint { bottom:34px; left:50%; transform:translateX(-50%); font-size:12px; letter-spacing:3px; text-transform:uppercase; opacity:.75; background:rgba(10,14,34,.35); padding:10px 22px; border-radius:999px; border:1px solid rgba(255,255,255,.18); backdrop-filter:blur(6px); animation:pulse 3.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{ opacity:.5 } 50%{ opacity:.85 } }
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:5; background:radial-gradient(ellipse at center, transparent 55%, rgba(5,8,20,.45) 100%); }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="vignette"></div>
+<div class="ui" id="title"><h1>Horizon</h1><p>a quiet sea</p></div>
+<div class="ui" id="clock"><div class="phase" id="phase">Day</div><div class="t" id="phaseTime"></div></div>
+<div class="ui" id="hint">click the sea · make a wave</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(function(){
+  const canvas = document.getElementById('scene');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 2000);
+
+  // ---------- lights ----------
+  const sunLight = new THREE.DirectionalLight(0xffe3b3, 1.4);
+  sunLight.position.set(60, 80, 20);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.left = -60; sunLight.shadow.camera.right = 60;
+  sunLight.shadow.camera.top = 60; sunLight.shadow.camera.bottom = -60;
+  sunLight.shadow.camera.far = 400;
+  scene.add(sunLight);
+  scene.add(new THREE.AmbientLight(0x8899bb, 0.45));
+  const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x1a2a3a, 0.5);
+  scene.add(hemi);
+
+  // ---------- sky dome ----------
+  const skyUniforms = {
+    topColor: { value: new THREE.Color(0x2a5f9e) },
+    midColor: { value: new THREE.Color(0x8fc3e8) },
+    botColor: { value: new THREE.Color(0xffd9a0) }
+  };
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(900, 32, 20),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite:false, uniforms: skyUniforms,
+      vertexShader:'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader:'uniform vec3 topColor,midColor,botColor; varying vec3 vP;' +
+        'void main(){ float h = normalize(vP).y;' +
+        ' vec3 c = h > 0.0 ? mix(midColor, topColor, pow(h,0.6)) : mix(midColor, botColor, pow(-h,0.5));' +
+        ' gl_FragColor = vec4(c,1.0); }'
+    })
+  );
+  scene.add(sky);
+
+  // ---------- sun & moon ----------
+  const sun = new THREE.Mesh(new THREE.SphereGeometry(38, 24, 24), new THREE.MeshBasicMaterial({ color:0xffe9b0, fog:false }));
+  const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(58, 24, 24), new THREE.MeshBasicMaterial({ color:0xffd27a, transparent:true, opacity:0.28, fog:false }));
+  const sunGroup = new THREE.Group(); sunGroup.add(sun, sunGlow); scene.add(sunGroup);
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(24, 24, 24), new THREE.MeshBasicMaterial({ color:0xdfe6f2, fog:false }));
+  const moonGlow = new THREE.Mesh(new THREE.SphereGeometry(36, 24, 24), new THREE.MeshBasicMaterial({ color:0xaac0e8, transparent:true, opacity:0.18, fog:false }));
+  const moonGroup = new THREE.Group(); moonGroup.add(moon, moonGlow); scene.add(moonGroup);
+
+  // ---------- stars ----------
+  const starCount = 700;
+  const starPos = new Float32Array(starCount*3);
+  for (let i=0;i<starCount;i++){
+    const theta = Math.random()*Math.PI*2, phi = Math.acos(Math.random()*0.95);
+    const r = 850;
+    starPos[i*3]   = r*Math.sin(phi)*Math.cos(theta);
+    starPos[i*3+1] = r*Math.cos(phi)*0.9 + 40;
+    starPos[i*3+2] = r*Math.sin(phi)*Math.sin(theta);
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  const starMat = new THREE.PointsMaterial({ color:0xffffff, size:2.2, sizeAttenuation:false, transparent:true, opacity:0 });
+  scene.add(new THREE.Points(starGeo, starMat));
+
+  // ---------- ocean ----------
+  const SEA_SIZE = 700, SEGS = 160;
+  const seaGeo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, SEGS, SEGS);
+  seaGeo.rotateX(-Math.PI/2);
+  const seaMat = new THREE.MeshPhongMaterial({ color:0x1a5f8a, shininess:140, specular:0x66ccee, flatShading:false, transparent:true, opacity:0.96 });
+  const sea = new THREE.Mesh(seaGeo, seaMat);
+  sea.receiveShadow = true;
+  scene.add(sea);
+  const seaPos = seaGeo.attributes.position;
+  const baseXZ = [];
+  for (let i=0;i<seaPos.count;i++) baseXZ.push([seaPos.getX(i), seaPos.getZ(i)]);
+
+  const ripples = []; // {x,z,t}
+  const MAX_RIPPLES = 12;
+
+  function baseHeight(x, z, t){
+    return Math.sin(x*0.055 + t*0.9)*0.85
+         + Math.sin(z*0.075 - t*0.7)*0.65
+         + Math.sin((x+z)*0.035 + t*0.5)*0.9
+         + Math.sin(x*0.16 - t*1.4)*0.28;
+  }
+  function heightAt(x, z, t){
+    let h = baseHeight(x, z, t);
+    for (let i=ripples.length-1;i>=0;i--){
+      const r = ripples[i], age = t - r.t;
+      if (age > 4.5){ ripples.splice(i,1); continue; }
+      const d = Math.hypot(x-r.x, z-r.z);
+      const wave = Math.sin(d*1.6 - age*9.0);
+      const envelope = Math.exp(-Math.pow((d - age*22.0)/7.0, 2));
+      const fade = Math.exp(-age*1.15) * Math.max(0, 1 - d/140);
+      h += wave * envelope * fade * 2.6;
+    }
+    return h;
+  }
+  sea.userData.heightAt = heightAt;
+
+  // ---------- ship ----------
+  const ship = new THREE.Group();
+  const wood = new THREE.MeshPhongMaterial({ color:0x6b4226, shininess:30 });
+  const woodDark = new THREE.MeshPhongMaterial({ color:0x3e2413, shininess:20 });
+  const sailMat = new THREE.MeshPhongMaterial({ color:0xf3ead8, side:THREE.DoubleSide, shininess:8 });
+  const hull = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 11, 12, 1), wood);
+  hull.rotation.z = Math.PI/2; hull.scale.set(1, 1, 0.55); hull.position.y = 1.0; hull.castShadow = true;
+  ship.add(hull);
+  const bow = new THREE.Mesh(new THREE.ConeGeometry(1.55, 3.2, 12), wood);
+  bow.rotation.z = -Math.PI/2; bow.scale.set(1, 1, 0.55); bow.position.set(7.0, 1.0, 0); bow.castShadow = true;
+  ship.add(bow);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(11.5, 0.35, 3.6), woodDark);
+  deck.position.y = 1.95; deck.castShadow = true; ship.add(deck);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.7, 2.2), woodDark);
+  cabin.position.set(-3.4, 2.8, 0); cabin.castShadow = true; ship.add(cabin);
+  const cabinTop = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.3, 2.5), new THREE.MeshPhongMaterial({ color:0xa33f2e }));
+  cabinTop.position.set(-3.4, 3.75, 0); ship.add(cabinTop);
+  function mast(x, h){
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, h, 8), woodDark);
+    m.position.set(x, 2.1 + h/2, 0); m.castShadow = true; ship.add(m);
+    return m;
+  }
+  function sail(x, y, w, h, curve){
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0); shape.quadraticCurveTo(w*0.55, h*0.45, 0, h);
+    shape.lineTo(-w*0.9, h); shape.quadraticCurveTo(-w*0.45, h*0.4, 0, 0);
+    const g = new THREE.ShapeGeometry(shape, 12);
+    const p = g.attributes.position;
+    for (let i=0;i<p.count;i++){ const py = p.getY(i); p.setZ(i, Math.sin(py/h * Math.PI) * curve); }
+    g.computeVertexNormals();
+    const s = new THREE.Mesh(g, sailMat);
+    s.position.set(x, y, 0); s.castShadow = true; ship.add(s);
+  }
+  mast(1.6, 8.5); sail(1.75, 3.1, 3.4, 6.2, 0.9);
+  mast(-2.6, 7.0); sail(-2.45, 3.3, 2.9, 5.0, 0.75);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.8), new THREE.MeshBasicMaterial({ color:0xd94f3d, side:THREE.DoubleSide }));
+  flag.position.set(1.6 + 0.8, 10.4, 0); ship.add(flag);
+  scene.add(ship);
+
+  // ---------- palettes ----------
+  const pal = {
+    day:   { top:0x2f6bb0, mid:0x9fcdf0, bot:0xffe0ae, sun:0xffe9b0, amb:0.5, hemi:0.55, fog:0xbfdcf0, sea:0x1c6390 },
+    dusk:  { top:0x3a3f6e, mid:0xe58e5a, bot:0xffc27a, sun:0xff9e4a, amb:0.35, hemi:0.35, fog:0xe0a06a, sea:0x274a6e },
+    night: { top:0x060a1c, mid:0x101a33, bot:0x1d2a44, sun:0x9fb4d8, amb:0.18, hemi:0.18, fog:0x0c1428, sea:0x0d2540 }
+  };
+  const fog = new THREE.Fog(0xbfdcf0, 120, 780);
+  scene.fog = fog;
+  const phaseEl = document.getElementById('phase');
+  const phaseTimeEl = document.getElementById('phaseTime');
+  const CYCLE = 100; // seconds per full day
+
+  function paletteAt(el){ // el = sun elevation -1..1
+    const tmp = {};
+    for (const key of ['top','mid','bot','sun','fog','sea']){
+      const a = new THREE.Color(pal.day[key]), b = new THREE.Color(pal.dusk[key]), c = new THREE.Color(pal.night[key]);
+      let col;
+      if (el > 0.25) col = a;
+      else if (el > -0.15) col = b.clone().lerp(a, Math.max(0,(el-0.0)/0.25)*0.4);
+      else col = c.clone().lerp(b, Math.max(0,(el+0.35)/0.2)*0.55);
+      tmp[key] = col;
+    }
+    const ambMix = THREE.MathUtils.clamp((el+0.3)/0.8, 0, 1);
+    tmp.amb = 0.18 + ambMix*0.32;
+    tmp.hemiI = 0.18 + ambMix*0.37;
+    return tmp;
+  }
+
+  // ---------- interaction ----------
+  const ray = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  let isDown = false, downX = 0, downY = 0;
+  canvas.addEventListener('pointerdown', e => { isDown=true; downX=e.clientX; downY=e.clientY; });
+  canvas.addEventListener('pointerup', e => {
+    isDown = false;
+    if (Math.hypot(e.clientX-downX, e.clientY-downY) > 6) return; // was a drag
+    pointer.x = (e.clientX/innerWidth)*2 - 1;
+    pointer.y = -(e.clientY/innerHeight)*2 + 1;
+    ray.setFromCamera(pointer, camera);
+    const hit = ray.intersectObject(sea);
+    if (hit.length){
+      ripples.push({ x:hit[0].point.x, z:hit[0].point.z, t:clock.getElapsedTime() });
+      if (ripples.length > MAX_RIPPLES) ripples.shift();
+      interestPulse = 1;
+    }
+  });
+
+  // ---------- camera rig ----------
+  let camAngle = 0.55, camDist = 29, camHeight = 13;
+  let interestPulse = 0;
+  let mouseX = 0, mouseY = 0;
+  window.addEventListener('pointermove', e => {
+    mouseX = (e.clientX/innerWidth)*2 - 1;
+    mouseY = (e.clientY/innerHeight)*2 - 1;
+    if (isDown) camAngle -= (e.movementX || 0) * 0.004;
+  });
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  const clock = new THREE.Clock();
+  const tOffset = parseFloat(new URLSearchParams(location.search).get('t') || '0') || 0;
+  let lastT = 0;
+
+  function animate(){
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime() + tOffset;
+    const dt = Math.min(0.05, t - lastT); lastT = t;
+
+    // sea vertices
+    for (let i=0;i<seaPos.count;i++){
+      const [x,z] = baseXZ[i];
+      seaPos.setY(i, heightAt(x, z, t));
+    }
+    seaPos.needsUpdate = true;
+    seaGeo.computeVertexNormals();
+
+    // day-night cycle
+    const phase = (t % CYCLE) / CYCLE;         // 0..1
+    const sunAngle = phase * Math.PI * 2 - Math.PI/2; // -90deg at start
+    const sunEl = Math.sin(sunAngle);
+    const sunDir = new THREE.Vector3(Math.cos(sunAngle), sunEl, 0.35).normalize();
+    sunGroup.position.copy(sunDir).multiplyScalar(820);
+    moonGroup.position.copy(sunDir).multiplyScalar(-820);
+    const pal2 = paletteAt(sunEl);
+    skyUniforms.topColor.value.copy(pal2.top);
+    skyUniforms.midColor.value.copy(pal2.mid);
+    skyUniforms.botColor.value.copy(pal2.bot);
+    scene.fog.color.copy(pal2.fog);
+    seaMat.color.copy(pal2.sea);
+    sunLight.color.copy(pal2.sun);
+    sunLight.intensity = Math.max(0, sunEl) * 1.5 + 0.05;
+    sunLight.position.copy(sunDir).multiplyScalar(120);
+    renderer.toneMappingExposure = 1.0;
+    hemi.intensity = pal2.hemiI;
+    starMat.opacity = THREE.MathUtils.clamp(-sunEl*1.6, 0, 0.95);
+    sun.material.color.copy(pal2.sun);
+    sunGlow.material.opacity = 0.12 + Math.max(0, sunEl)*0.2;
+
+    // ship bobbing
+    const sh = heightAt(0, 0, t);
+    const shL = heightAt(-4, 0, t), shR = heightAt(4, 0, t);
+    const shF = heightAt(0, -4, t), shB = heightAt(0, 4, t);
+    ship.position.y = sh * 0.55 + 0.4;
+    ship.rotation.z = Math.atan2(shL - shR, 8) * 0.9;
+    ship.rotation.x = Math.atan2(shF - shB, 8) * 0.85;
+    ship.rotation.y = Math.sin(t*0.12)*0.06;
+    flag.rotation.y = Math.sin(t*2.4)*0.35;
+
+    // camera
+    interestPulse = Math.max(0, interestPulse - dt*1.5);
+    const sway = Math.sin(t*0.07)*0.12;
+    const targetDist = camDist - interestPulse*5;
+    camera.position.set(
+      Math.sin(camAngle + sway)*targetDist*Math.cos(mouseY*0.06),
+      camHeight - mouseY*2 + interestPulse*1.2,
+      Math.cos(camAngle + sway)*targetDist*Math.cos(mouseY*0.06)
+    );
+    camera.lookAt(0, 4.2 + sh*0.3, 0);
+
+    // UI
+    const isDay = sunEl > 0;
+    phaseEl.textContent = isDay ? (sunEl < 0.25 ? 'Golden hour' : 'Day') : (sunEl > -0.18 ? 'Dusk' : 'Night');
+    phaseTimeEl.textContent = Math.floor(phase*24).toString().padStart(2,'0') + ':' + Math.floor((phase*24%1)*60).toString().padStart(2,'0');
+
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+</script>
+</body>
+</html>

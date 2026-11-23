@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Horizon — a quiet sail</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2712%27 fill=%27%23ffcf7a%27/%3E%3Crect x=%270%27 y=%2716%27 width=%2732%27 height=%2716%27 fill=%27%231a3a5c%27/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <div class="brand">
+    <span class="brand-mark">✦</span>
+    <div>
+      <h1>Horizon</h1>
+      <p>a quiet sail</p>
+    </div>
+  </div>
+  <div class="hint" id="hint">Click the sea to ripple it · WASD / arrows to sail · drag to look around</div>
+  <div class="clock">
+    <div class="clock-sky" id="clockSky"></div>
+    <div class="clock-meta">
+      <span class="label" id="phaseLabel">Golden hour</span>
+      <span class="sub" id="phaseSub">the sun is setting</span>
+    </div>
+  </div>
+</div>
+
+<div id="vignette"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js"
+  }
+}
+</script>
+<script type="module" src="script.js"></script>
+</body>
+</html>

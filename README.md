@@ -67,6 +67,8 @@ Most tests were done with **Deepseek V4 Flash 0731**.
 | [Hy4 flash — OpenCode](./ship-hy4-flash-opencode/) | Serenity | Import maps + CDN Three.js, shader ocean + click ripples |
 | [Q3.8 27B — Pi (gsq)](./ship-q3.8-27b-pi-gsq/) | Adrift | Vendored Three.js, shader swell + click ripples |
 | [Inkling-2-Mini — Pi](./ship-Inkling-2-Mini-pi/) | Horizon | Import maps + Three.js, shader sky + click ripples |
+| [Inkling-2-Mini — Pi (new)](./ship-Inkling-2-Mini-pi-new/) | Horizon — a quiet sea | CDN Three.js, CPU-displaced ocean + click waves, 100s day/night |
+| [Inkling-2-Mini — OpenCode (new)](./ship-ink2-opencode-new/) | Horizon — a quiet sail | Import maps + vendored Three.js, shader ocean + click ripples, WASD sailing |
 
 ## Takeaways
 
